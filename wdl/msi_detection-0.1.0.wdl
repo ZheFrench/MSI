@@ -40,10 +40,12 @@ import "module/msisensorpro-1.3.0.wdl" as msisensorpro
 import "module/bedtools-2.31.1.wdl" as bedtools
 
 # What to analyse, given in the params JSON as one object:
-#   "msi_detection.inputs": {"run": "<run directory>"}
-# (a Directory: the engine mounts it in the tasks that use it)
+#   "msi_detection.inputs": {"run": "<run directory>", "samples": ["<ID>", ...]}
+# (a Directory: the engine mounts it in the tasks that use it). samples is
+# optional: without it, every BAM of the run (but the controls) is analysed.
 struct InputDirs {
 	Directory run
+	Array[String]? samples
 }
 
 # Reference files, given in the params JSON as one object:
@@ -94,12 +96,11 @@ workflow msi_detection {
 			msi_analysis_list: "List actually analysed by msisensor-pro pro: the panel-marked list (filter PASS/NO) with a panel, the genome-wide one otherwise.",
 			panel_correspondence_bed: "Microsatellite sites inside the panel regions, named <site>#<probe>#<chrom:start-end> (only with bed_panel).",
 			roi_correspondence_bed: "Microsatellite sites inside the ROI markers, named ...#<marker> (only with bed_roi).",
-			msisensorpro_all: "Per BAM: msisensor-pro <sample>_all (every evaluated site); empty for a failed BAM.",
-			msisensorpro_unstable: "Per BAM: msisensor-pro <sample>_unstable (unstable sites only); empty for a failed BAM.",
+			msisensorpro_all: "Per BAM: msisensor-pro <sample>_all (every evaluated site).",
+			msisensorpro_unstable: "Per BAM: msisensor-pro <sample>_unstable (unstable sites only).",
 			report_viz: "This run's HTML/JS reports, runs/<run_id>/ (added to the reports folder by msi_detection_post_p.py index, which also rebuilds the dashboard).",
 			report_data: "This run's raw msisensor-pro outputs, <run_id>/<library>/<sample>{,_all,_dis,_unstable}.",
 			report_log: "This run's report log, <run_id>_MSI_<timestamp>.log.",
-			all_bams_ok: "false when msisensor-pro failed on some BAM (reported as failed in the reports).",
 		}
 	}
 
@@ -133,6 +134,7 @@ workflow msi_detection {
 			input_dir = inputs.run,
 			recursive = params.recursive,
 			exclude_prefixes = exclude_prefixes,
+			include_samples = select_first([inputs.samples, []]),
 	}
 
 	# --- Reference list: genome-wide scan, then optional panel/ROI restriction ---
@@ -255,8 +257,6 @@ workflow msi_detection {
 				msi_list = analysis_list,
 				threads = params.threads,
 				coverage_threshold = params.coverage_threshold,
-				# a failed BAM is reported (status = failed) by ta03_report
-				tolerate_failure = true,
 				container = msisensorpro_container,
 		}
 	}
@@ -271,7 +271,6 @@ workflow msi_detection {
 			sample_names = sample_name,
 			libraries = library,
 			bam_paths = bam_path,
-			statuses = ta02_sensorpro_pro.status,
 			all_files = ta02_sensorpro_pro.all,
 			unstable_files = ta02_sensorpro_pro.unstable,
 			dis_files = ta02_sensorpro_pro.dis,
@@ -294,11 +293,10 @@ workflow msi_detection {
 		Directory report_viz = ta03_report.viz
 		Directory report_data = ta03_report.data
 		Directory report_log = ta03_report.log
-		Boolean all_bams_ok = ta03_report.all_bams_ok
 	}
 
 	parameter_meta {
-		inputs: "run: run directory; every *.bam in it is processed (one sub-folder per library, e.g. alignments_libA/, with params.recursive = true). Its name is the run_id."
+		inputs: "run: run directory; every *.bam in it is processed (one sub-folder per library, e.g. alignments_libA/, with params.recursive = true). Its name is the run_id. samples (optional): only the BAMs whose name contains one of these IDs are processed (each ID must match a BAM)."
 		references: "genome: reference fasta the BAMs are aligned on, scanned by msisensor-pro scan; pro_list (optional): already generated scan list of genome, skips the scan; bed_panel (optional): panel BED (plain BED, no track line, e.g. *.amplicons.bed), analysis restricted to its microsatellites; bed_roi (optional): classic MSI markers (BAT26, NR21, ...), highlighted in the reports."
 		params: "threads: msisensor-pro pro -b (threads per BAM); coverage_threshold: msisensor-pro pro -c (msisensor-pro's own default: 15 WGS, 20 WXS); recursive: also look for BAMs in the run directory's sub-folders (one per library); p_process (reports only): min_reads, a site counts (% unstable, site status) only with >= this many reads, pval_cutoff, a site is unstable when its p-value is above this, and sample_na_fraction, sample status NA when more than this fraction of its loci are NA or MSU."
 		msisensorpro_container: "msisensor-pro image [default: apptainer-recipes/msisensor-pro-1.3.0.sif]; file:///...sif on slurm_apptainer."
@@ -312,7 +310,7 @@ workflow msi_detection {
 
 task find_bams {
 	meta {
-		description: "List every *.bam of input_dir (except those whose name starts with one of exclude_prefixes) with its index, library folder and sample name, as paths relative to input_dir (the caller rebuilds them from its own input_dir value)."
+		description: "List every *.bam of input_dir (except those whose name starts with one of exclude_prefixes; with include_samples, only those whose name contains one of them) with its index, library folder and sample name, as paths relative to input_dir (the caller rebuilds them from its own input_dir value)."
 		outputs: {
 			bams: "One row per BAM: bam path, index path (both relative to input_dir), library (folder relative to input_dir, \".\" if none), sample name (BAM basename).",
 		}
@@ -322,6 +320,7 @@ task find_bams {
 		Directory input_dir
 		Boolean recursive
 		Array[String] exclude_prefixes = []
+		Array[String] include_samples = []
 		Int threads = 1
 
 		String container
@@ -344,6 +343,24 @@ task find_bams {
 		else
 			cp all_bams.txt bam_list.txt
 		fi
+
+		# Optional selection: only the BAMs whose name contains one of
+		# include_samples (every library); each ID must match a BAM. Empty IDs
+		# are ignored: [] and [""] both keep every BAM.
+		ids="~{write_lines(include_samples)}"
+		if grep -q . "$ids"; then
+			awk 'NR == FNR { if ($0 != "") ids[$0]; next }
+				{
+					n = split($0, p, "/"); name = p[n]; sub(/\.bam$/, "", name)
+					keep = 0
+					for (id in ids) if (index(name, id)) { found[id]; keep = 1 }
+					if (keep) print
+				}
+				END { for (id in ids) if (!(id in found)) { print "No BAM for sample " id > "/dev/stderr"; err = 1 }; exit err }' \
+				"$ids" bam_list.txt > selected.txt
+			mv selected.txt bam_list.txt
+			sed 's/^/Selected: /' bam_list.txt >&2
+		fi
 		while read -r bam; do
 			bai="$bam.bai"
 			[ -e "$dir/$bai" ] || bai="${bam%.bam}.bai"
@@ -364,6 +381,7 @@ task find_bams {
 		input_dir: "Run directory to scan for *.bam."
 		recursive: "Descend into sub-folders (one per library)."
 		exclude_prefixes: "BAMs whose name starts with one of these are left out (controls)."
+		include_samples: "If it holds a non-empty ID: only the BAMs whose name contains one of these IDs are kept; an ID with no BAM fails the task."
 	}
 
 	requirements {
@@ -567,7 +585,6 @@ task report {
 			viz: "This run's HTML/JS reports: runs/<run_id>/.",
 			data: "This run's raw outputs: <run_id>/<library>/<sample>{,_all,_dis,_unstable}.",
 			log: "This run's log: <run_id>_MSI_<timestamp>.log.",
-			all_bams_ok: "false when some BAM failed (reported as failed in the reports, which are still all written).",
 		}
 	}
 
@@ -577,7 +594,6 @@ task report {
 		Array[String] sample_names
 		Array[String] libraries
 		Array[String] bam_paths
-		Array[String] statuses
 		Array[File] all_files
 		Array[File] unstable_files
 		Array[File] dis_files
@@ -597,14 +613,11 @@ task report {
 		set -euo pipefail
 		mkdir -p viz data log
 
-		# One line per BAM: sample, library, bam, status, _all, _unstable, _dis, summary
+		# One line per BAM: sample, library, bam, _all, _unstable, _dis, summary
 		paste ~{write_lines(sample_names)} ~{write_lines(libraries)} ~{write_lines(bam_paths)} \
-			~{write_lines(statuses)} ~{write_lines(all_files)} ~{write_lines(unstable_files)} \
+			~{write_lines(all_files)} ~{write_lines(unstable_files)} \
 			~{write_lines(dis_files)} ~{write_lines(summary_files)} > samples.tsv
 
-		# Exit 3 = every report written but some BAM failed: kept as
-		# all_bams_ok = false instead of failing the task (and losing its outputs).
-		rc=0
 		python3 "~{msi_helper}" report \
 			--run-id "~{run_id}" \
 			--samples samples.tsv \
@@ -615,17 +628,13 @@ task report {
 			--min-reads ~{min_reads} \
 			--pval-cutoff ~{pval_cutoff} \
 			--sample-na-fraction ~{sample_na_fraction} \
-			~{if defined(roi_correspondence_bed) then "--roi-bed \"" + select_first([roi_correspondence_bed]) + "\"" else ""} \
-			|| rc=$?
-		[ "$rc" = 0 ] || [ "$rc" = 3 ] || exit "$rc"
-		echo "$rc" > report_rc
+			~{if defined(roi_correspondence_bed) then "--roi-bed \"" + select_first([roi_correspondence_bed]) + "\"" else ""}
 	>>>
 
 	output {
 		Directory viz = "viz"
 		Directory data = "data"
 		Directory log = "log"
-		Boolean all_bams_ok = read_int("report_rc") == 0
 	}
 
 	parameter_meta {
@@ -635,11 +644,10 @@ task report {
 		sample_names: "Per BAM: sample name (BAM basename)."
 		libraries: "Per BAM: library folder (\".\" if none)."
 		bam_paths: "Per BAM: BAM path (only recorded in the reports)."
-		statuses: "Per BAM: msisensor-pro status, ok or failed."
-		all_files: "Per BAM: msisensor-pro _all (empty if failed)."
-		unstable_files: "Per BAM: msisensor-pro _unstable (empty if failed)."
-		dis_files: "Per BAM: msisensor-pro _dis (empty if failed)."
-		summary_files: "Per BAM: msisensor-pro summary (empty if failed)."
+		all_files: "Per BAM: msisensor-pro _all."
+		unstable_files: "Per BAM: msisensor-pro _unstable."
+		dis_files: "Per BAM: msisensor-pro _dis."
+		summary_files: "Per BAM: msisensor-pro summary."
 		roi_correspondence_bed: "ROI correspondence BED, to flag the classic markers in the reports."
 		genome: "Reference fasta path (only recorded in the reports)."
 		min_reads: "A site counts (% unstable, site status) only with >= this many reads."

@@ -1,6 +1,9 @@
 {
     "msi_detection.inputs": {
-        "run": ""
+        "run": "",
+        "samples": [
+            ""
+        ]
     },
     "msi_detection.references": {
         "genome": "/media/jp/SSD2/CHU/refData/hg19/Homo_sapiens.GRCh37.75.wout_contigs.fa",

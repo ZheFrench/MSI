@@ -75,7 +75,7 @@ start with a digit, hence the letter; sprocket's `calls/<call>/` folders group t
 
 | Call (task) | Runs | What it does | Main output |
 |---|---|---|---|
-| `ta01_find_bams` (`find_bams`) | python image, bash | Lists every `*.bam` of the run directory (`inputs.run`) (sub-folders with `params.recursive`), with its index (`.bam.bai` or `.bai`), its library (folder relative to `input_dir`, `.` if none) and its sample name (BAM basename). `inputs.run` is a `Directory` (mounted by the engine); paths are returned relative to it. Fails if a BAM has no index or no BAM is found. | `bams`: one row per BAM |
+| `ta01_find_bams` (`find_bams`) | python image, bash | Lists every `*.bam` of the run directory (`inputs.run`) (sub-folders with `params.recursive`), with its index (`.bam.bai` or `.bai`), its library (folder relative to `input_dir`, `.` if none) and its sample name (BAM basename). `inputs.run` is a `Directory` (mounted by the engine); paths are returned relative to it. With `inputs.samples`, keeps only the BAMs whose name contains one of these IDs (every library). Fails if a BAM has no index, no BAM is found, or a sample ID matches no BAM. | `bams`: one row per BAM |
 | `tb01_sensorpro_scan` (`msisensorpro.scan`) | msisensor-pro | `msisensor-pro scan` of the genome: every microsatellite site. Skipped when `references.pro_list` is given. Not redone from one run to the next: sprocket's call cache (`[run.task] cache = "on"`) reuses the previous scan (same genome, image and `threads`), as long as that run's folder is kept. | `<genome>.msisensor_pro.list` |
 | `tb02_list_to_bed` (`list_to_bed`) | python image | Converts the list to BED6 (start = location − 1, end = start + unit length × repeat times). | `<list>.bed` |
 | `tb03_panel_chrom` (`align_chrom_naming`) | python image, awk | Only with `bed_panel`. Copy of the panel BED with its chromosome names (`chr1` / `1`) aligned on the list's: bedtools matches them literally. | `<panel>.chrnorm.bed` |
@@ -83,8 +83,8 @@ start with a digit, hence the letter; sprocket's `calls/<call>/` folders group t
 | `tb05_panel_correspondence` (`name_correspondence`) | python image, awk | Turns the intersection into a BED6 named `<site>#<probe>#<chrom:start-end>`. | `<list>.panel.bed` |
 | `tb06_mark_list` (`mark_list`) | python image | Only with `bed_panel`. Full list, same rows, `filter` = `PASS` for the panel sites, `NO` elsewhere: **the list analysed by msisensor-pro**. | `<list>.panel.list` |
 | `tc01_roi_chrom`, `tc02_roi_intersect`, `tc03_roi_correspondence` | python image / bedtools / python image | Only with `bed_roi`. Same three steps with the ROI markers, on the panel sites when there is a panel (genome-wide otherwise). Name ends with `#<marker>`. | `<list>.panel.roi.bed` |
-| `ta02_sensorpro_pro` × N (`msisensorpro.pro`) | msisensor-pro | Scatter, one per BAM: `msisensor-pro pro -d <analysis list> -t <bam> -b threads -c coverage_threshold`. Called with `tolerate_failure = true`: a failure does not fail the task, `status = failed`. | `<sample>`, `_all`, `_dis`, `_unstable`, `status` |
-| `ta03_report` (`report`) | python image | Gets every BAM's results as `File`s, copies them to `data/<run_id>/<library>/`, builds this run's reports in `viz/runs/<run_id>/` (run page, sample pages; the all-runs dashboard is built by `index` after the run) and writes the log; writes nothing outside its task. A failed BAM is reported as failed and gives `all_bams_ok = false` (the task itself succeeds, so its outputs are kept). | `viz/`, `data/`, `log/` (`Directory`), `all_bams_ok` |
+| `ta02_sensorpro_pro` × N (`msisensorpro.pro`) | msisensor-pro | Scatter, one per BAM: `msisensor-pro pro -d <analysis list> -t <bam> -b threads -c coverage_threshold`. A failure on any BAM fails the workflow. | `<sample>`, `_all`, `_dis`, `_unstable` |
+| `ta03_report` (`report`) | python image | Gets every BAM's results as `File`s, copies them to `data/<run_id>/<library>/`, builds this run's reports in `viz/runs/<run_id>/` (run page, sample pages; the all-runs dashboard is built by `index` after the run) and writes the log; writes nothing outside its task. | `viz/`, `data/`, `log/` (`Directory`) |
 
 The python steps are subcommands of two scripts:
 [`scripts/msi_detection_main_p.py`](scripts/msi_detection_main_p.py) (`list-to-bed`, `mark-list`: the
@@ -98,7 +98,7 @@ Keys of the params JSON, all prefixed `msi_detection.` (see [`params/example_par
 params key (see `BASH.sprocket.sh`):
 
 ```json
-"msi_detection.inputs":     {"run": "..."},
+"msi_detection.inputs":     {"run": "...", "samples": ["E25D04852T", "..."]},
 "msi_detection.references": {"genome": "...", "bed_panel": "...", "bed_roi": "...", "pro_list": "..."},
 "msi_detection.params":     {"threads": 8, "coverage_threshold": 1, "recursive": true, "p_process": {"min_reads": 200, "pval_cutoff": 0.1, "sample_na_fraction": 0.5}},
 ```
@@ -108,6 +108,7 @@ Optional members can be left out of their object.
 | Object / input | Member | Required | Description |
 |---|---|---|---|
 | `inputs` (`InputDirs`) | `run` | yes | Run directory; its name is the `run_id` |
+| | `samples` | no | Sample IDs: only the BAMs whose name contains one of them are analysed (an ID with no BAM fails the run). Without it: every BAM but the controls |
 | `references` (`References`) | `genome` | yes | Fasta the BAMs are aligned on |
 | | `pro_list` | no | Existing scan list: skips the scan |
 | | `bed_panel` | no | Plain panel BED (no `track` line, e.g. `*.amplicons.bed`) |
@@ -150,8 +151,8 @@ calls/<call>/attempts/0/{command,stdout,stderr,work/}   each call (ta01_find_bam
 
 Workflow outputs (`outputs.json`): `msi_reference_list`, `msi_analysis_list`,
 `panel_correspondence_bed`, `roi_correspondence_bed`, `msisensorpro_all`,
-`msisensorpro_unstable` (empty files for a failed BAM), `report_viz`, `report_data`, `report_log`
-(Directory), `all_bams_ok`.
+`msisensorpro_unstable`, `report_viz`, `report_data`, `report_log`
+(Directory).
 
 ## Containers: development vs production
 

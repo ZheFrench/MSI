@@ -74,9 +74,8 @@ task pro {
 		email: "jeanphilipe.villemin(at)chu-montpellier.fr"
 		version: "0.1.0"
 		date: "2026-10-05"
-		description: "msisensor-pro pro: MSI scoring of a tumor-only BAM. With tolerate_failure, a failure does not fail the task (status = failed, empty result files)."
+		description: "msisensor-pro pro: MSI scoring of a tumor-only BAM. A msisensor-pro failure fails the task."
 		outputs: {
-			status: "\"ok\", or \"failed\" when msisensor-pro failed with tolerate_failure (see this task's stderr).",
 			summary: "<prefix>: summary file (empty in tumor-only mode).",
 			all: "<prefix>_all: every evaluated site with pro_p, threshold and coverage.",
 			dis: "<prefix>_dis: read-length distribution per site.",
@@ -91,7 +90,6 @@ task pro {
 		String prefix = basename(bam, ".bam")
 		Int threads = 1
 		Int? coverage_threshold
-		Boolean tolerate_failure = false
 
 		String container
 	}
@@ -103,21 +101,12 @@ task pro {
 		# the engine localizes it there (~{basename(bai)}).
 		# pro's own stdout is very verbose (per chromosome/window): discarded;
 		# its stderr stays in this task's stderr.
-		status=ok
 		msisensor-pro pro -d "~{msi_list}" -t "~{bam}" -o "~{prefix}" -b ~{threads} \
 			~{if defined(coverage_threshold) then "-c " + select_first([coverage_threshold]) else ""} \
-			> /dev/null || status=failed
-		if [ "$status" = failed ]; then
-			[ "~{tolerate_failure}" = true ] || exit 1
-			# empty result files: the outputs stay File (not File?), so a
-			# caller can gather them per BAM; status tells them apart
-			for f in "~{prefix}" "~{prefix}"_all "~{prefix}"_dis "~{prefix}"_unstable; do : > "$f"; done
-		fi
-		echo "$status" > status.txt
+			> /dev/null
 	>>>
 
 	output {
-		String status = read_string("status.txt")
 		File summary = prefix
 		File all = prefix + "_all"
 		File dis = prefix + "_dis"
@@ -131,7 +120,6 @@ task pro {
 		prefix: "Output prefix [default: BAM basename]."
 		threads: "msisensor-pro pro -b."
 		coverage_threshold: "msisensor-pro pro -c [default: msisensor-pro's own, 15 WGS / 20 WXS]."
-		tolerate_failure: "Report a failure through status (with empty result files) instead of failing the task."
 		container: "msisensor-pro image."
 	}
 

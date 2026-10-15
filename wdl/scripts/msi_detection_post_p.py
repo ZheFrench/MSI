@@ -30,9 +30,9 @@ list-to-bed and mark-list, are in msi_detection_main_p.py):
     DIR/index_msi_run.html, index_msi_sample.html - written once (only if the template changed)
 
 samples.tsv (written by the workflow, no header) has one line per BAM:
-    sample_name  library  bam_path  status  all  unstable  dis  summary
+    sample_name  library  bam_path  all  unstable  dis  summary
 library is the BAM's folder relative to input_dir ("." when the BAM sits
-directly in it), status is "ok" or "failed" (then the 4 file columns are empty).
+directly in it). A failed BAM fails the workflow before report runs.
 
 Usage (normally only from msi_detection-0.1.0.wdl):
     sprocket run msi_detection-0.1.0.wdl @params/example_params_1.json
@@ -63,18 +63,13 @@ UNSTABLE_COLUMNS = [
     "CovReads",
 ]
 # Columns of the workflow's samples TSV (one row per BAM)
-SAMPLES_TSV_COLUMNS = ["sample_name", "library", "bam_path", "status", "all", "unstable", "dis", "summary"]
+SAMPLES_TSV_COLUMNS = ["sample_name", "library", "bam_path", "all", "unstable", "dis", "summary"]
 
 # Reports folder: viz/runs/<run_id>/ per run, and the all-runs dashboard
 RUNS_DIRNAME = "runs"
 RUNS_DATA_FILENAME = "index_msi_run.js"
 OUTPUT_INDEX_FILENAME = "index_msi_run.html"
 SAMPLES_DATA_FILENAME = "index_msi_sample.js"
-
-# report's exit code when every report was written but some BAM(s) failed
-# (msisensor-pro status "failed"): distinct from a crash (1), so the WDL task
-# can still return its outputs and flag the failure (all_bams_ok = false).
-EXIT_BAM_FAILED = 3
 
 logger = logging.getLogger("MSI-detection")
 
@@ -1306,7 +1301,6 @@ def report(args) -> None:
     data_run_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"{len(samples)} BAM file(s) processed -> run {run_id}")
 
-    failures = []
     sample_metas = []
     for row in samples:
         sample_name = row["sample_name"]
@@ -1318,11 +1312,6 @@ def report(args) -> None:
         library = rel_dir.as_posix() if rel_dir != Path(".") else None
         sample_key = (rel_dir / sample_name).as_posix()
         bam_name = Path(row["bam_path"]).name
-        if row["status"] != "ok":
-            logger.error(f"Failed on {bam_name} (see the ta02_sensorpro_pro call stderr)")
-            failures.append(bam_name)
-            sample_metas.append({"sample_name": sample_name, "library": library, "sample_key": sample_key, "failed": True})
-            continue
         data_library_dir = data_run_dir / rel_dir
         publish_raw_outputs(row, data_library_dir)
         logger.info(f"{bam_name} (sample: {sample_key}) -> {data_library_dir}")
@@ -1338,10 +1327,6 @@ def report(args) -> None:
     # Only this run's pages: the dashboard (index_msi_*.html/.js, every run)
     # is built by the index subcommand once this run is added to the reports.
     logger.info(f"Report: {viz_run_dir / (run_id + '_index_run.html')}")
-
-    if failures:
-        logger.error(f"{len(failures)}/{len(samples)} BAM(s) failed: {', '.join(failures)}")
-        sys.exit(EXIT_BAM_FAILED)
 
 
 def main():
