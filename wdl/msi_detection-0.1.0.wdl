@@ -21,19 +21,20 @@ version 1.3
 # Apptainer image (requirements.container) and call the tool directly: the
 # backend runs it (sprocket slurm_apptainer, on this workstation's single-node
 # Slurm in development, on the cluster in production).
-# The pure-Python steps (list/BED conversions, HTML reports) are
-# subcommands of msi_helper (msi_detection_pp.py), run in the generic
-# python3 image (helper_container).
+# The pure-Python steps are subcommands of two scripts, run in the generic
+# python3 image (helper_container): msi_main_helper (msi_detection_main_p.py,
+# list/BED conversions) and msi_post_helper (msi_detection_post_p.py, HTML
+# reports).
 #
 # Calls are named after their line on the diagram, t<line><rank>_<step>
 # (a: BAMs, b: msisensor-pro list, c: ROI markers; WDL names can't start
 # with a digit), so sprocket's calls/ folders group the same way:
 #   ta01_find_bams ------------------------------------------------------------.
-#   tb01_msisensorpro_scan (or pro_list) -> tb02_list_to_bed                     |
+#   tb01_sensorpro_scan (or pro_list) -> tb02_list_to_bed                        |
 #     -> [panel] tb03_panel_chrom -> tb04_panel_intersect -> tb05_panel_correspondence -> tb06_mark_list
 #     -> [roi]   tc01_roi_chrom -> tc02_roi_intersect -> tc03_roi_correspondence
-#   scatter: ta02_msisensorpro_pro (one per BAM) <-----------------------------'
-#   ta03_msi_report: viz/, data/, log/ as Directory outputs (in the run folder)
+#   scatter: ta02_sensorpro_pro (one per BAM) <--------------------------------'
+#   ta03_report: viz/, data/, log/ as Directory outputs (in the run folder)
 
 import "module/msisensorpro-1.3.0.wdl" as msisensorpro
 import "module/bedtools-2.31.1.wdl" as bedtools
@@ -58,7 +59,7 @@ struct References {
 # Run settings, given in the params JSON as one object:
 #   "msi_detection.params": {"threads": 8, "coverage_threshold": 1, "recursive": true,
 #                            "p_process": {"min_reads": 200, "pval_cutoff": 0.1, "sample_na_fraction": 0.5}}
-# p_process: report settings (ta03_msi_report), msisensor-pro itself doesn't use them.
+# p_process: report settings (ta03_report), msisensor-pro itself doesn't use them.
 struct PProcess {
 	Int min_reads
 	Float pval_cutoff
@@ -75,7 +76,7 @@ struct RunParams {
 # Where results go is not a workflow input: every output stays in sprocket's
 # run folder (the workflow writes nothing outside its tasks). BASH.sprocket.sh
 # sets the destinations: -o for sprocket's runs, and the reports folder that
-# `msi_detection_pp.py index` fills after each run (adds runs/<run_id>/,
+# `msi_detection_post_p.py index` fills after each run (adds runs/<run_id>/,
 # rebuilds the dashboard of every run). The scan is not redone from one run
 # to the next: sprocket's call cache reuses the previous result (same genome,
 # image and threads).
@@ -95,7 +96,7 @@ workflow msi_detection {
 			roi_correspondence_bed: "Microsatellite sites inside the ROI markers, named ...#<marker> (only with bed_roi).",
 			msisensorpro_all: "Per BAM: msisensor-pro <sample>_all (every evaluated site); empty for a failed BAM.",
 			msisensorpro_unstable: "Per BAM: msisensor-pro <sample>_unstable (unstable sites only); empty for a failed BAM.",
-			report_viz: "This run's HTML/JS reports, runs/<run_id>/ (added to the reports folder by msi_detection_pp.py index, which also rebuilds the dashboard).",
+			report_viz: "This run's HTML/JS reports, runs/<run_id>/ (added to the reports folder by msi_detection_post_p.py index, which also rebuilds the dashboard).",
 			report_data: "This run's raw msisensor-pro outputs, <run_id>/<library>/<sample>{,_all,_dis,_unstable}.",
 			report_log: "This run's report log, <run_id>_MSI_<timestamp>.log.",
 			all_bams_ok: "false when msisensor-pro failed on some BAM (reported as failed in the reports).",
@@ -112,7 +113,11 @@ workflow msi_detection {
 		String msisensorpro_container = "file:///media/jp/SSD2/CHU/code/pipeline-jp/wdl/apptainer-recipes/msisensor-pro-1.3.0.sif"
 		String bedtools_container = "file:///media/jp/SSD2/CHU/code/pipeline-jp/wdl/apptainer-recipes/bedtools-2.31.1.sif"
 		String helper_container = "file:///media/jp/SSD2/CHU/code/pipeline-jp/wdl/apptainer-recipes/python-3.12.sif"
-		File msi_helper = "/media/jp/SSD2/CHU/code/pipeline-jp/wdl/scripts/msi_detection_pp.py"
+		# Controls, not analysed: BAMs whose name starts with one of these.
+		Array[String] exclude_prefixes = ["TN", "TPH"]
+
+		File msi_main_helper = "/media/jp/SSD2/CHU/code/pipeline-jp/wdl/scripts/msi_detection_main_p.py"
+		File msi_post_helper = "/media/jp/SSD2/CHU/code/pipeline-jp/wdl/scripts/msi_detection_post_p.py"
 
 		RunParams params
 	}
@@ -127,19 +132,20 @@ workflow msi_detection {
 			container = helper_container,
 			input_dir = inputs.run,
 			recursive = params.recursive,
+			exclude_prefixes = exclude_prefixes,
 	}
 
 	# --- Reference list: genome-wide scan, then optional panel/ROI restriction ---
 
 	if (!defined(references.pro_list)) {
-		call msisensorpro.scan as tb01_msisensorpro_scan {
+		call msisensorpro.scan as tb01_sensorpro_scan {
 			input:
 				threads = params.threads,
 				genome = references.genome,
 				container = msisensorpro_container,
 		}
 	}
-	File msi_list = select_first([references.pro_list, tb01_msisensorpro_scan.msi_list])
+	File msi_list = select_first([references.pro_list, tb01_sensorpro_scan.msi_list])
 	String list_stem = basename(msi_list, ".list")
 
 	call list_to_bed as tb02_list_to_bed {
@@ -148,7 +154,7 @@ workflow msi_detection {
 			container = helper_container,
 			msi_list = msi_list,
 			output_name = list_stem + ".bed",
-			msi_helper = msi_helper,
+			msi_helper = msi_main_helper,
 	}
 
 	if (defined(references.bed_panel)) {
@@ -189,7 +195,7 @@ workflow msi_detection {
 				msi_list = msi_list,
 				panel_correspondence_bed = tb05_panel_correspondence.bed,
 				output_name = list_stem + ".panel.list",
-				msi_helper = msi_helper,
+				msi_helper = msi_main_helper,
 		}
 	}
 	# With a panel, msisensor-pro pro analyses the panel-marked list (PASS/NO)
@@ -241,7 +247,7 @@ workflow msi_detection {
 		String sample_name = bam_row[3]
 		String library = bam_row[2]
 
-		call msisensorpro.pro as ta02_msisensorpro_pro {
+		call msisensorpro.pro as ta02_sensorpro_pro {
 			input:
 				bam = bam_path,
 				bai = "~{inputs.run}/~{bam_row[1]}",
@@ -249,7 +255,7 @@ workflow msi_detection {
 				msi_list = analysis_list,
 				threads = params.threads,
 				coverage_threshold = params.coverage_threshold,
-				# a failed BAM is reported (status = failed) by ta03_msi_report
+				# a failed BAM is reported (status = failed) by ta03_report
 				tolerate_failure = true,
 				container = msisensorpro_container,
 		}
@@ -257,7 +263,7 @@ workflow msi_detection {
 
 	# --- Reports ---
 
-	call msi_report as ta03_msi_report {
+	call report as ta03_report {
 		input:
 			threads = params.threads,
 			container = helper_container,
@@ -265,17 +271,17 @@ workflow msi_detection {
 			sample_names = sample_name,
 			libraries = library,
 			bam_paths = bam_path,
-			statuses = ta02_msisensorpro_pro.status,
-			all_files = ta02_msisensorpro_pro.all,
-			unstable_files = ta02_msisensorpro_pro.unstable,
-			dis_files = ta02_msisensorpro_pro.dis,
-			summary_files = ta02_msisensorpro_pro.summary,
+			statuses = ta02_sensorpro_pro.status,
+			all_files = ta02_sensorpro_pro.all,
+			unstable_files = ta02_sensorpro_pro.unstable,
+			dis_files = ta02_sensorpro_pro.dis,
+			summary_files = ta02_sensorpro_pro.summary,
 			roi_correspondence_bed = tc03_roi_correspondence.bed,
 			genome = "~{references.genome}",
 			min_reads = params.p_process.min_reads,
 			pval_cutoff = params.p_process.pval_cutoff,
 			sample_na_fraction = params.p_process.sample_na_fraction,
-			msi_helper = msi_helper,
+			msi_helper = msi_post_helper,
 	}
 
 	output {
@@ -283,12 +289,12 @@ workflow msi_detection {
 		File msi_analysis_list = analysis_list
 		File? panel_correspondence_bed = tb05_panel_correspondence.bed
 		File? roi_correspondence_bed = tc03_roi_correspondence.bed
-		Array[File] msisensorpro_all = ta02_msisensorpro_pro.all
-		Array[File] msisensorpro_unstable = ta02_msisensorpro_pro.unstable
-		Directory report_viz = ta03_msi_report.viz
-		Directory report_data = ta03_msi_report.data
-		Directory report_log = ta03_msi_report.log
-		Boolean all_bams_ok = ta03_msi_report.all_bams_ok
+		Array[File] msisensorpro_all = ta02_sensorpro_pro.all
+		Array[File] msisensorpro_unstable = ta02_sensorpro_pro.unstable
+		Directory report_viz = ta03_report.viz
+		Directory report_data = ta03_report.data
+		Directory report_log = ta03_report.log
+		Boolean all_bams_ok = ta03_report.all_bams_ok
 	}
 
 	parameter_meta {
@@ -298,13 +304,15 @@ workflow msi_detection {
 		msisensorpro_container: "msisensor-pro image [default: apptainer-recipes/msisensor-pro-1.3.0.sif]; file:///...sif on slurm_apptainer."
 		bedtools_container: "bedtools image [default: apptainer-recipes/bedtools-2.31.1.sif]; file:///...sif on slurm_apptainer."
 		helper_container: "Generic python3 + awk image of the python/bash tasks [default: apptainer-recipes/python-3.12.sif]; the script is not in it."
-		msi_helper: "msi_detection_pp.py, given to the python tasks as a File [default: scripts/msi_detection_pp.py]."
+		exclude_prefixes: "BAMs whose name starts with one of these are not analysed (controls) [default: TN, TPH]."
+		msi_main_helper: "msi_detection_main_p.py, given to list_to_bed and mark_list as a File [default: scripts/msi_detection_main_p.py]."
+		msi_post_helper: "msi_detection_post_p.py, given to the report task as a File [default: scripts/msi_detection_post_p.py]."
 	}
 }
 
 task find_bams {
 	meta {
-		description: "List every *.bam of input_dir with its index, library folder and sample name, as paths relative to input_dir (the caller rebuilds them from its own input_dir value)."
+		description: "List every *.bam of input_dir (except those whose name starts with one of exclude_prefixes) with its index, library folder and sample name, as paths relative to input_dir (the caller rebuilds them from its own input_dir value)."
 		outputs: {
 			bams: "One row per BAM: bam path, index path (both relative to input_dir), library (folder relative to input_dir, \".\" if none), sample name (BAM basename).",
 		}
@@ -313,6 +321,7 @@ task find_bams {
 	input {
 		Directory input_dir
 		Boolean recursive
+		Array[String] exclude_prefixes = []
 		Int threads = 1
 
 		String container
@@ -326,7 +335,15 @@ task find_bams {
 		# Paths relative to input_dir: inside a container, input_dir is mounted
 		# at its own path, meaningless outside the task.
 		(cd "$dir" && LC_ALL=C find -L . ~{if recursive then "" else "-maxdepth 1"} -name '*.bam' -type f) \
-			| sed 's|^\./||' | LC_ALL=C sort > bam_list.txt
+			| sed 's|^\./||' | LC_ALL=C sort > all_bams.txt
+		# Controls (BAM name starting with one of exclude_prefixes) left out.
+		exclude="~{sep("|", exclude_prefixes)}"
+		if [ -n "$exclude" ]; then
+			{ grep -Ev "(^|/)($exclude)[^/]*\.bam$" all_bams.txt || true; } > bam_list.txt
+			{ grep -E "(^|/)($exclude)[^/]*\.bam$" all_bams.txt || true; } | sed 's/^/Excluded (control): /' >&2
+		else
+			cp all_bams.txt bam_list.txt
+		fi
 		while read -r bam; do
 			bai="$bam.bai"
 			[ -e "$dir/$bai" ] || bai="${bam%.bam}.bai"
@@ -346,6 +363,7 @@ task find_bams {
 		threads: "CPUs reserved for the task."
 		input_dir: "Run directory to scan for *.bam."
 		recursive: "Descend into sub-folders (one per library)."
+		exclude_prefixes: "BAMs whose name starts with one of these are left out (controls)."
 	}
 
 	requirements {
@@ -386,7 +404,7 @@ task list_to_bed {
 		threads: "CPUs reserved for the task."
 		msi_list: "msisensor-pro scan list."
 		output_name: "Output BED file name."
-		msi_helper: "Path to msi_detection_pp.py."
+		msi_helper: "Path to msi_detection_main_p.py."
 	}
 
 	requirements {
@@ -532,7 +550,7 @@ task mark_list {
 		msi_list: "Genome-wide scan list."
 		panel_correspondence_bed: "Panel correspondence BED (panel_intersect)."
 		output_name: "Output list file name."
-		msi_helper: "Path to msi_detection_pp.py."
+		msi_helper: "Path to msi_detection_main_p.py."
 	}
 
 	requirements {
@@ -542,9 +560,9 @@ task mark_list {
 	}
 }
 
-task msi_report {
+task report {
 	meta {
-		description: "Gather every BAM's raw msisensor-pro outputs into data/<run_id>/<library>/ and build this run's HTML reports into viz/runs/<run_id>/ (run and sample pages; the all-runs dashboard is built by msi_detection_pp.py index), all returned as Directory outputs."
+		description: "Gather every BAM's raw msisensor-pro outputs into data/<run_id>/<library>/ and build this run's HTML reports into viz/runs/<run_id>/ (run and sample pages; the all-runs dashboard is built by msi_detection_post_p.py index), all returned as Directory outputs."
 		outputs: {
 			viz: "This run's HTML/JS reports: runs/<run_id>/.",
 			data: "This run's raw outputs: <run_id>/<library>/<sample>{,_all,_dis,_unstable}.",
@@ -627,7 +645,7 @@ task msi_report {
 		min_reads: "A site counts (% unstable, site status) only with >= this many reads."
 		pval_cutoff: "A site is unstable when its p-value is above this."
 		sample_na_fraction: "Sample status NA when more than this fraction of its loci are NA or MSU."
-		msi_helper: "msi_detection_pp.py."
+		msi_helper: "msi_detection_post_p.py."
 	}
 
 	requirements {

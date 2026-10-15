@@ -75,6 +75,7 @@ import sys
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -174,8 +175,8 @@ def to_container_path(host_path) -> str:
         fatal(f"{host_path} is outside {HOST_MOUNT_ROOT}, the only disk bound into the container "
               f"(as {CONTAINER_MOUNT_ROOT}) -- move it under {HOST_MOUNT_ROOT} or extend the --bind.")
 
-DEFAULT_SIF = SCRIPT_DIR / "apptainer-recipes" / "msisensor-pro-1.3.0.sif"
-DEFAULT_BEDTOOLS_SIF = SCRIPT_DIR / "apptainer-recipes" / "bedtools-2.31.1.sif"
+DEFAULT_SIF = SCRIPT_DIR.parent / "wdl" / "apptainer-recipes" / "msisensor-pro-1.3.0.sif"
+DEFAULT_BEDTOOLS_SIF = SCRIPT_DIR.parent / "wdl" / "apptainer-recipes" / "bedtools-2.31.1.sif"
 
 
 
@@ -869,7 +870,21 @@ tr.site-group:first-child td{border-top:none;}
 footer{color:var(--text-muted);font-size:.78rem;text-align:center;padding-top:6px;}
 """
 
-FONT_LINK = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">'
+FAVICON_PATH = Path(__file__).parent / "favicon-msi.svg"
+
+
+def favicon_link() -> str:
+    """<link rel="icon"> embedding favicon-msi.svg (next to this script) as a
+    data URI, so every page carries its icon wherever viz/ ends up and even
+    opened on its own. Empty if the file is missing."""
+    if not FAVICON_PATH.exists():
+        return ""
+    return f'<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,{quote(FAVICON_PATH.read_text().strip())}">'
+
+
+# Shared <head> links of every page: web fonts + favicon.
+HEAD_LINKS = ('<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">'
+              + favicon_link())
 
 
 def extract_library_suffix(lib: str) -> str:
@@ -910,6 +925,10 @@ def build_run_table(samples: list, rows_by_sample: dict = None) -> dict:
     def roi_site_keys(rows):
         return {(r["chromosome"], r["location"]) for r in rows if row_is_unstable(r) and r.get("roi_marker")}
 
+    def roi_covered(rows):
+        # msisensor-pro reports pro_p as NaN for a site with 0 reads
+        return any(r.get("roi_marker") and r["CovReads"] > 0 and r["pro_p"] == r["pro_p"] for r in rows)
+
     table = []
     for sname, entries in by_sample.items():
         lib_rows = rows_by_sample.get(sname, {})
@@ -940,7 +959,10 @@ def build_run_table(samples: list, rows_by_sample: dict = None) -> dict:
         if len(ok_libs) >= 2:
             row["consensus_total"] = len(set.intersection(*(site_keys(lib_rows.get(lib, [])) for lib in ok_libs)))
             row["consensus_roi"] = len(set.intersection(*(roi_site_keys(lib_rows.get(lib, [])) for lib in ok_libs)))
-            row["call"] = "MSI" if row["consensus_roi"] >= MSI_CONSENSUS_ROI_CUTOFF else "MSS"
+            if not any(roi_covered(lib_rows.get(lib, [])) for lib in ok_libs):
+                row["call"] = "NA"  # no ROI marker read at all (0 reads everywhere): no call possible
+            else:
+                row["call"] = "MSI" if row["consensus_roi"] >= MSI_CONSENSUS_ROI_CUTOFF else "MSS"
         table.append(row)
 
     return {
@@ -955,7 +977,7 @@ def render_run_index(run_id: str) -> str:
     its one data file, <run_id>_index_run.js (window.RUN_DATA), loaded via
     <script src>."""
     html = """<title>__TITLE__</title>
-__FONT_LINK__
+__HEAD_LINKS__
 <style>__CSS__</style>
 <div class="wrap">
   <div class="breadcrumb"><a href="../../__OUTPUT_INDEX_FILE__">&larr; All runs</a></div>
@@ -998,7 +1020,8 @@ __FONT_LINK__
       if (e.failed) return '<td colspan="2">' + FAILED + '</td>';
       return num(n(e.unstable_region_count)) + num(e.unstable_roi_count);
     }).join("");
-    var status = r.call ? '<span class="chip ' + (r.call === "MSI" ? "mid" : "low") + '">' + r.call + '</span>'
+    var status = (r.call && r.call !== "NA") ? '<span class="chip ' + (r.call === "MSI" ? "mid" : "low") + '">' + r.call + '</span>'
+               : r.call === "NA" ? '<span class="lib-empty">NA</span>'
                         : '<span class="lib-empty">—</span>';
     return '<tr><td><a href="./' + r.sample_name + '_index_sample.html">' + r.sample_name + '</a></td>'
       + num(pct(r.pct_region_unstable)) + cells + num(n(r.consensus_total)) + num(n(r.consensus_roi))
@@ -1013,7 +1036,7 @@ __FONT_LINK__
 """
     return (html
             .replace("__TITLE__", f"Run {run_id}")
-            .replace("__FONT_LINK__", FONT_LINK)
+            .replace("__HEAD_LINKS__", HEAD_LINKS)
             .replace("__CSS__", REPORT_CSS)
             .replace("__RUN_ID__", run_id)
             .replace("__OUTPUT_INDEX_FILE__", OUTPUT_INDEX_FILENAME)
@@ -1060,7 +1083,7 @@ def render_sample_group_report(run_id, sample_name, generated_at, rows, entries_
     site_count = len({(r["chromosome"], r["location"]) for r in rows if row_is_unstable(r)})
 
     html = """<title>__TITLE__</title>
-__FONT_LINK__
+__HEAD_LINKS__
 <style>__CSS__</style>
 <div class="wrap">
   <div class="breadcrumb"><a href="./__RUN_INDEX_FILE__">&larr; Run __RUN_ID__</a></div>
@@ -1075,7 +1098,7 @@ __FONT_LINK__
   <div class="panel">
     <h2>Filters</h2>
     <div class="field">
-      <label for="pvalInput">Min p-value (kept if any library clears it) <span class="val" id="pvalVal">0.1</span></label>
+      <label for="pvalInput">Min p-value (kept if any library clears it; ROI always shown) <span class="val" id="pvalVal">0.1</span></label>
       <input type="text" id="pvalInput" value="0.1" inputmode="decimal">
     </div>
     <div class="reset-row"><button id="resetBtn" type="button">Reset filters</button></div>
@@ -1120,7 +1143,7 @@ __FONT_LINK__
 
   function chromRank(c){ if (CHROM_ORDER[c]!=null) return CHROM_ORDER[c]; var n=parseInt(c.replace(/^chr/i,""),10); return isNaN(n)?99:n; }
   function toSubscript(n){ var map={"0":"\\u2080","1":"\\u2081","2":"\\u2082","3":"\\u2083","4":"\\u2084","5":"\\u2085","6":"\\u2086","7":"\\u2087","8":"\\u2088","9":"\\u2089"}; return String(n).split("").map(function(d){return map[d]||d;}).join(""); }
-  function fmtSci(v){ if (v===0) return "0"; if (Math.abs(v)<0.0001) return v.toExponential(2); return v.toFixed(4); }
+  function fmtSci(v){ if (v===null || isNaN(v)) return "-"; if (v===0) return "0"; if (Math.abs(v)<0.0001) return v.toExponential(2); return v.toFixed(4); }
   function shortLib(lib){ var m=/(lib[A-Za-z0-9]+)$/i.exec(lib); return m?m[1]:lib; }
 
   // Position is the reference key: every *_unstable row for the same
@@ -1165,17 +1188,22 @@ __FONT_LINK__
   // disagree -- some clear it, some don't -- an unresolved call, like the
   // chr4:1806012 case (libA 0.0965, libB 0.1037: one either side of 0.1).
   // Fixed at 0.1 regardless of state.minPval, which only controls which
-  // rows are shown, not this call.
+  // rows are shown, not this call. Only libraries that actually covered the
+  // site count (CovReads > 0; msisensor-pro reports pro_p as NaN at 0 reads);
+  // NA when none did.
   var MSI_PVAL_CUTOFF = 0.1;
+  function covered(l){ return l.CovReads > 0 && !isNaN(l.pro_p); }
   function siteStatus(g){
-    if (!g.libs.length) return "MSS";
-    var passing = g.libs.filter(function(l){ return l.pro_p > MSI_PVAL_CUTOFF; }).length;
-    if (passing === g.libs.length) return "MSI";
+    var libs = g.libs.filter(covered);
+    if (!libs.length) return "NA";
+    var passing = libs.filter(function(l){ return l.pro_p > MSI_PVAL_CUTOFF; }).length;
+    if (passing === libs.length) return "MSI";
     if (passing === 0) return "MSS";
     return "MSU";
   }
-  var STATUS_CHIP = { MSI:'<span class="chip mid">MSI</span>', MSU:'<span class="chip danger">MSU</span>', MSS:'<span class="chip low">MSS</span>' };
-  var STATUS_RANK = { MSI:2, MSU:1, MSS:0 };
+  var STATUS_CHIP = { MSI:'<span class="chip mid">MSI</span>', MSU:'<span class="chip danger">MSU</span>',
+                      MSS:'<span class="chip low">MSS</span>', NA:'<span class="lib-empty">NA</span>' };
+  var STATUS_RANK = { MSI:2, MSU:1, MSS:0, NA:-1 };
 
   // ROI sites (roi_marker set) sort first by default (roi_marker descending
   // puts non-empty marker names ahead of "").
@@ -1183,8 +1211,11 @@ __FONT_LINK__
 
   function applyFilters(){
     state.filtered = GROUPED.filter(function(g){
-      // Kept if at least one library's p-value clears the threshold -- a site
-      // only one library flags is still worth surfacing.
+      // The classic MSI markers (ROI) are always shown, whatever their
+      // p-value or coverage. Any other site is kept if at least one library's
+      // p-value clears the threshold -- a site only one library flags is
+      // still worth surfacing.
+      if (g.roi_marker) return true;
       return g.libs.some(function(l){ return l.pro_p > state.minPval; });
     });
     sortRows(); state.page=0; renderTable();
@@ -1279,7 +1310,7 @@ __FONT_LINK__
 """
     return (html
             .replace("__TITLE__", f"MSI Report - {sample_name}")
-            .replace("__FONT_LINK__", FONT_LINK)
+            .replace("__HEAD_LINKS__", HEAD_LINKS)
             .replace("__CSS__", REPORT_CSS)
             .replace("__RUN_ID__", run_id)
             .replace("__RUN_INDEX_FILE__", f"{run_id}_index_run.html")
@@ -1316,7 +1347,7 @@ def render_output_index_shell() -> str:
     """Static page shell. Loads run summaries from index_msi_run.js (the
     window.RUNS_DATA) via <script src>."""
     html = """<title>MSI Dashboard - Run View</title>
-__FONT_LINK__
+__HEAD_LINKS__
 <style>__CSS__
 .nav-links{{display:flex;gap:12px;margin-bottom:20px;}}
 .nav-links a{{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:var(--accent-soft);
@@ -1370,7 +1401,7 @@ __FONT_LINK__
 </script>
 """
     return (html
-            .replace("__FONT_LINK__", FONT_LINK)
+            .replace("__HEAD_LINKS__", HEAD_LINKS)
             .replace("__CSS__", REPORT_CSS)
             .replace("__RUNS_DATA_FILE__", RUNS_DATA_FILENAME)
             .replace("__RUNS_DIR__", RUNS_DIRNAME))
@@ -1605,7 +1636,7 @@ def ensure_consolidated_sample_page(viz_dir: Path) -> None:
                   {"library_labels": sorted(labels), "samples": samples})
 
     html = """<title>MSI Dashboard - Sample View</title>
-__FONT_LINK__
+__HEAD_LINKS__
 <style>__CSS__
 .nav-links{display:flex;gap:12px;margin-bottom:20px;}
 .nav-links a{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:var(--accent-soft);
@@ -1658,7 +1689,8 @@ __FONT_LINK__
       if (e.failed) return '<td colspan="2"><span class="status-pill failed">failed</span></td>';
       return num(n(e.unstable_region_count)) + num(e.unstable_roi_count);
     }).join("");
-    var status = s.call ? '<span class="chip ' + (s.call === "MSI" ? "mid" : "low") + '">' + s.call + '</span>'
+    var status = (s.call && s.call !== "NA") ? '<span class="chip ' + (s.call === "MSI" ? "mid" : "low") + '">' + s.call + '</span>'
+               : s.call === "NA" ? '<span class="lib-empty">NA</span>'
                         : '<span class="lib-empty">—</span>';
     return '<tr><td>' + s.run_id + '</td>'
       + '<td><a href="./__RUNS_DIR__/' + s.run_id + '/' + s.sample_name + '_index_sample.html">' + s.sample_name + '</a></td>'
@@ -1673,7 +1705,7 @@ __FONT_LINK__
 </script>
 """
     (viz_dir / "index_msi_sample.html").write_text(html
-        .replace("__FONT_LINK__", FONT_LINK)
+        .replace("__HEAD_LINKS__", HEAD_LINKS)
         .replace("__CSS__", REPORT_CSS)
         .replace("__OUTPUT_INDEX_FILE__", OUTPUT_INDEX_FILENAME)
         .replace("__RUNS_DIR__", RUNS_DIRNAME)
