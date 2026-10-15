@@ -1,0 +1,27 @@
+Bootstrap: docker
+From: python:3.12-slim
+
+%labels
+    Software Python 3.12 (Debian slim) + awk/coreutils/findutils
+    Version 3.12
+
+%help
+    Generic image for the host-side steps of msi_detection: python3 (standard
+    library only) for msi_detection_main_p.py and msi_detection_post_p.py,
+    given to the tasks as WDL Files (NOT in the image), and awk/find/sort for the bash
+    tasks. No pipeline code here: changing the script needs no rebuild.
+
+    Usage:
+        apptainer exec python-3.12.sif python3 script.py ...
+        apptainer exec python-3.12.sif awk '...' file
+
+%environment
+    export LC_ALL=C.UTF-8
+
+%test
+    set -e
+    python3 --version
+    awk 'BEGIN { print "awk ok" }'
+    find --version | head -1
+    sort --version | head -1
+    realpath --version | head -1

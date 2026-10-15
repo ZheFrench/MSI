@@ -26,18 +26,19 @@ updates the same HTML reports as the Python pipeline (all runs → one run → o
 
 ```sh
 cd /media/jp/SSD2/CHU/code/pipeline-jp/wdl
-./BASH.sprocket.sh                    # params/example_params_1.json
-./BASH.sprocket.sh other_params.json
-CONFIG=backends.conf/sprocket.prod.toml ./BASH.sprocket.sh prod_params.json   # on the cluster
+./BASH.sprocket.sh                    # cron mode: pre_process picks the run left to analyse, then runs it
+./BASH.sprocket.batch.sh CONFIG_DIR   # batch mode: every params JSON of CONFIG_DIR
 ```
 
-`BASH.sprocket.sh`:
+`BASH.sprocket.sh` (cron) first runs `msi_detection_pre_p.py`, which writes the params JSON of
+the run finished by ADIVAR and not yet in the MSI locker (moved to `$WORK/config/`) and adds that run
+to the locker. Then both scripts, for each params JSON:
 
 1. sets the destinations, hardcoded in the script (not in the params): `VIZ` (reports folder) and
    `WORK` (sprocket's runs), created if needed;
-2. runs `sprocket run -s -c $CONFIG` (default `backends.conf/sprocket.local.toml`) in
+2. runs `sprocket run -s -c $SPROCKET_CONFIG` (default `backends.conf/sprocket.local.toml`) in
    `$WORK/sprocket/runs/msi_detection/<timestamp>/`, one folder per task;
-3. runs `msi_detection_pp.py index` as a Slurm job (`srun`, in `python-3.12.sif`): moves the run's
+3. runs `msi_detection_post_p.py index` as a Slurm job (`srun`, in `python-3.12.sif`): copies the run's
    `viz/runs/<run_id>/` into `$VIZ/runs/` and rebuilds the dashboard from every
    `$VIZ/runs/*/` (`index_msi_run.js`, `index_msi_sample.js`; the two `.html` are written once,
    only rewritten if their template changes).
@@ -75,18 +76,20 @@ start with a digit, hence the letter; sprocket's `calls/<call>/` folders group t
 | Call (task) | Runs | What it does | Main output |
 |---|---|---|---|
 | `ta01_find_bams` (`find_bams`) | python image, bash | Lists every `*.bam` of the run directory (`inputs.run`) (sub-folders with `params.recursive`), with its index (`.bam.bai` or `.bai`), its library (folder relative to `input_dir`, `.` if none) and its sample name (BAM basename). `inputs.run` is a `Directory` (mounted by the engine); paths are returned relative to it. Fails if a BAM has no index or no BAM is found. | `bams`: one row per BAM |
-| `tb01_msisensorpro_scan` (`msisensorpro.scan`) | msisensor-pro | `msisensor-pro scan` of the genome: every microsatellite site. Skipped when `references.pro_list` is given. Not redone from one run to the next: sprocket's call cache (`[run.task] cache = "on"`) reuses the previous scan (same genome, image and `threads`), as long as that run's folder is kept. | `<genome>.msisensor_pro.list` |
+| `tb01_sensorpro_scan` (`msisensorpro.scan`) | msisensor-pro | `msisensor-pro scan` of the genome: every microsatellite site. Skipped when `references.pro_list` is given. Not redone from one run to the next: sprocket's call cache (`[run.task] cache = "on"`) reuses the previous scan (same genome, image and `threads`), as long as that run's folder is kept. | `<genome>.msisensor_pro.list` |
 | `tb02_list_to_bed` (`list_to_bed`) | python image | Converts the list to BED6 (start = location − 1, end = start + unit length × repeat times). | `<list>.bed` |
 | `tb03_panel_chrom` (`align_chrom_naming`) | python image, awk | Only with `bed_panel`. Copy of the panel BED with its chromosome names (`chr1` / `1`) aligned on the list's: bedtools matches them literally. | `<panel>.chrnorm.bed` |
 | `tb04_panel_intersect` (`bedtools.intersect`) | bedtools | `bedtools intersect -wa -wb -f 1.0`: the sites fully inside a panel region, one row per overlap. | `<list>.panel.intersect.tsv` |
 | `tb05_panel_correspondence` (`name_correspondence`) | python image, awk | Turns the intersection into a BED6 named `<site>#<probe>#<chrom:start-end>`. | `<list>.panel.bed` |
 | `tb06_mark_list` (`mark_list`) | python image | Only with `bed_panel`. Full list, same rows, `filter` = `PASS` for the panel sites, `NO` elsewhere: **the list analysed by msisensor-pro**. | `<list>.panel.list` |
 | `tc01_roi_chrom`, `tc02_roi_intersect`, `tc03_roi_correspondence` | python image / bedtools / python image | Only with `bed_roi`. Same three steps with the ROI markers, on the panel sites when there is a panel (genome-wide otherwise). Name ends with `#<marker>`. | `<list>.panel.roi.bed` |
-| `ta02_msisensorpro_pro` × N (`msisensorpro.pro`) | msisensor-pro | Scatter, one per BAM: `msisensor-pro pro -d <analysis list> -t <bam> -b threads -c coverage_threshold`. Called with `tolerate_failure = true`: a failure does not fail the task, `status = failed`. | `<sample>`, `_all`, `_dis`, `_unstable`, `status` |
-| `ta03_msi_report` (`msi_report`) | python image | Gets every BAM's results as `File`s, copies them to `data/<run_id>/<library>/`, builds this run's reports in `viz/runs/<run_id>/` (run page, sample pages; the all-runs dashboard is built by `index` after the run) and writes the log; writes nothing outside its task. A failed BAM is reported as failed and gives `all_bams_ok = false` (the task itself succeeds, so its outputs are kept). | `viz/`, `data/`, `log/` (`Directory`), `all_bams_ok` |
+| `ta02_sensorpro_pro` × N (`msisensorpro.pro`) | msisensor-pro | Scatter, one per BAM: `msisensor-pro pro -d <analysis list> -t <bam> -b threads -c coverage_threshold`. Called with `tolerate_failure = true`: a failure does not fail the task, `status = failed`. | `<sample>`, `_all`, `_dis`, `_unstable`, `status` |
+| `ta03_report` (`report`) | python image | Gets every BAM's results as `File`s, copies them to `data/<run_id>/<library>/`, builds this run's reports in `viz/runs/<run_id>/` (run page, sample pages; the all-runs dashboard is built by `index` after the run) and writes the log; writes nothing outside its task. A failed BAM is reported as failed and gives `all_bams_ok = false` (the task itself succeeds, so its outputs are kept). | `viz/`, `data/`, `log/` (`Directory`), `all_bams_ok` |
 
-The python steps are subcommands of [`scripts/msi_detection_pp.py`](scripts/msi_detection_pp.py)
-(`list-to-bed`, `mark-list`, `report`); the report code is the one of `run_msisensor2.0.1.py`.
+The python steps are subcommands of two scripts:
+[`scripts/msi_detection_main_p.py`](scripts/msi_detection_main_p.py) (`list-to-bed`, `mark-list`: the
+reference list) and [`scripts/msi_detection_post_p.py`](scripts/msi_detection_post_p.py) (`report`, and
+`index` after the run); the report code is the one of `run_msisensor2.0.1.py`.
 
 ## Inputs
 
@@ -117,13 +120,14 @@ Optional members can be left out of their object.
 | | `p_process.sample_na_fraction` | yes | Reports: sample status NA when more than this fraction of its loci are NA or MSU (e.g. 0.5) |
 | `msisensorpro_container`, `bedtools_container` | | no (set in the WDL: `apptainer-recipes/*.sif`) | Image of each tool (see below) |
 | `helper_container` | | no (set in the WDL: `apptainer-recipes/python-3.12.sif`) | Generic python3 + awk image of the python/bash tasks |
-| `msi_helper` | | no (set in the WDL: `scripts/msi_detection_pp.py`) | The python helper, a `File` |
+| `msi_main_helper` | | no (set in the WDL: `scripts/msi_detection_main_p.py`) | Python reference list steps, a `File` |
+| `msi_post_helper` | | no (set in the WDL: `scripts/msi_detection_post_p.py`) | Python report steps, a `File` |
 
 The genome, panel and ROI must use the same build as the BAMs (e.g. GRCh37 + `ROI.hg19.bed`).
 
 ## Outputs
 
-Returned by `ta03_msi_report` as `Directory` outputs, in its `work/` folder of the run directory;
+Returned by `ta03_report` as `Directory` outputs, in its `work/` folder of the run directory;
 `index` then adds `runs/<run_id>/` to `$VIZ` and builds the dashboard there:
 
 ```
@@ -172,7 +176,7 @@ inputs and its work directory (nothing else of the host is visible).
 | Slurm | single node on this workstation (`backends.conf/slurm-local/install.sh`) | the cluster, partition `prod`, 600 min |
 | `*_container` | WDL default: `file://.../apptainer-recipes/<tool>.sif` | override in the prod JSON: `file:///bioinfo/apptainer_sif/<tool>_<version>.sif` |
 
-The python script is deliberately **not** in the image: it is a `File` input (`msi_helper`),
+The python scripts are deliberately **not** in the image: they are `File` inputs (`msi_main_helper`, `msi_post_helper`),
 versioned with the WDL, so editing it needs no image rebuild (a frozen image with the script inside
 only if the workflow is ever distributed without this folder).
 
@@ -186,12 +190,14 @@ written by `index`, after the run.
 |---|---|
 | `msi_detection-0.1.0.wdl` | The workflow |
 | `module/msisensorpro-1.3.0.wdl`, `module/bedtools-2.31.1.wdl` | Tool modules (tasks `scan`, `pro`; `intersect`) |
-| `scripts/msi_detection_pp.py` | Python steps (`msi_helper`; page icon embedded) |
+| `scripts/msi_detection_pre_p.py` | Before the workflow: params JSON of the runs left to analyse (run by `BASH.sprocket.sh`) |
+| `scripts/msi_detection_main_p.py` | Reference list steps (`msi_main_helper`) |
+| `scripts/msi_detection_post_p.py` | Report and dashboard steps (`msi_post_helper`, and `index` after the run; page icon embedded) |
 | `apptainer-recipes/python-3.12.def` | Generic python3 + awk image of the python/bash tasks |
 | `params/example_params_1.json` | Params for Run141_Juno (GRCh37, Juno v3 panel, ROI hg19) |
 | `backends.conf/sprocket.local.toml`, `sprocket.prod.toml` | sprocket configs: Slurm + Apptainer, this workstation / the cluster |
 | `backends.conf/slurm-local/` | Single-node Slurm of this workstation (`sudo ./install.sh`) |
-| `BASH.sprocket.sh` | `sprocket run` with this folder's config and params |
+| `BASH.sprocket.sh`, `BASH.sprocket.batch.sh` | `sprocket run` with this folder's config: cron mode (run found by pre_process) / batch mode (folder of params JSON) |
 | `BASH.doc.sh`, `apptainer-recipes/sprocket-doc-0.31.0.def` | HTML documentation (`docs/`, generated) and its image |
 | `diagram/msi_detection_metromap.drawio` / `.preview.png`, `diagram/BASH.render_png.sh` | Workflow diagram, its PNG export |
 
