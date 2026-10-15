@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
 """
-msi_detection_pp.py
+msi_detection_post_p.py
 
 Python helper of the msi_detection-0.1.0.wdl workflow (WDL port of
 run_msisensor2.0.1.py). The workflow itself reads the JSON inputs
 ("msi_detection.input_dir", "msi_detection.genome", ...) and runs every
 external tool in its own WDL task (msisensor-pro scan, msisensor-pro pro,
-bedtools intersect, each via its Apptainer image). This script only holds the
-pure-Python steps those tasks chain together, one subcommand each:
+bedtools intersect, each via its Apptainer image). This script holds the
+steps after the analysis, one subcommand each (the reference list steps,
+list-to-bed and mark-list, are in msi_detection_main_p.py):
 
-    list-to-bed  LIST OUT_BED
-        MSIsensor-pro .list -> BED6 (one interval per microsatellite site).
-    mark-list    LIST PANEL_BED OUT_LIST
-        Full .list with "filter" = PASS for sites in PANEL_BED, NO otherwise
-        (the list msisensor-pro pro analyses when a panel is given).
     report       --run-id RUN --samples samples.tsv --genome FASTA
                  --data-output DIR --viz-output DIR --log-output DIR
                  --min-reads N --pval-cutoff P --sample-na-fraction F
@@ -27,7 +23,7 @@ pure-Python steps those tasks chain together, one subcommand each:
 
     index        --viz DIR [--run-outputs outputs.json]
         Run after the workflow, outside it (it writes into the reports
-        folder): moves the run's runs/<run_id>/ into DIR/runs/, then rebuilds
+        folder): copies the run's runs/<run_id>/ into DIR/runs/, then rebuilds
         the dashboard from every DIR/runs/*/:
 
     DIR/index_msi_run.js, index_msi_sample.js     - rewritten (all runs, all samples)
@@ -54,7 +50,26 @@ from pathlib import Path
 from typing import NoReturn
 from urllib.parse import quote
 
+# Set by report from the workflow's params.p_process (min_reads, pval_cutoff, sample_na_fraction).
+MIN_READS = 200  # a site counts (% unstable, site status) only with >= this many reads
+MSI_PVAL_CUTOFF = 0.1  # a site is unstable when pro_p > this
+SAMPLE_NA_FRACTION = 0.5  # sample status NA when more than this fraction of its loci are NA or MSU
+MSI_CONSENSUS_ROI_CUTOFF = 3  # consensus ROI unstable sites >= this -> MSI
+
+# Columns of msisensor-pro's *_all / *_unstable files
+UNSTABLE_COLUMNS = [
+    "chromosome", "location", "left_flank_bases", "repeat_times",
+    "repeat_unit_bases", "right_flank_bases", "pro_p", "pro_q",
+    "CovReads",
+]
+# Columns of the workflow's samples TSV (one row per BAM)
+SAMPLES_TSV_COLUMNS = ["sample_name", "library", "bam_path", "status", "all", "unstable", "dis", "summary"]
+
+# Reports folder: viz/runs/<run_id>/ per run, and the all-runs dashboard
 RUNS_DIRNAME = "runs"
+RUNS_DATA_FILENAME = "index_msi_run.js"
+OUTPUT_INDEX_FILENAME = "index_msi_run.html"
+SAMPLES_DATA_FILENAME = "index_msi_sample.js"
 
 # report's exit code when every report was written but some BAM(s) failed
 # (msisensor-pro status "failed"): distinct from a crash (1), so the WDL task
@@ -93,99 +108,8 @@ def fatal(msg: str) -> NoReturn:
 
 
 # ---------------------------------------------------------------------------
-# Reference list preparation (list-to-bed / mark-list)
-# ---------------------------------------------------------------------------
-
-def convert_list_to_bed(list_path: Path, bed_path: Path) -> Path:
-    """Convert a MSIsensor-pro *.msisensor_pro.list reference file into a BED6
-    file (chrom, start, end, name, score=0, strand=+).
-
-    "location" in the .list is the 1-based start of the repeat; BED is
-    0-based half-open, so start = location - 1 and end = start +
-    repeat_unit_length * repeat_times.
-    """
-    logger.info(f"Generating BED file from microsatellite list: {bed_path}")
-    count = 0
-    with open(list_path) as fh_in, open(bed_path, "w") as fh_out:
-        header = fh_in.readline().rstrip("\n").split("\t")
-        idx = {name: i for i, name in enumerate(header)}
-        for line in fh_in:
-            line = line.rstrip("\n")
-            if not line:
-                continue
-            cols = line.split("\t")
-            chromosome = cols[idx["chromosome"]]
-            location = int(cols[idx["location"]])
-            repeat_unit_length = int(cols[idx["repeat_unit_length"]])
-            repeat_times = int(cols[idx["repeat_times"]])
-            repeat_unit_bases = cols[idx["repeat_unit_bases"]]
-            left_flank_bases = cols[idx["left_flank_bases"]]
-            right_flank_bases = cols[idx["right_flank_bases"]]
-
-            start = location - 1
-            end = start + repeat_unit_length * repeat_times
-            name = f"{repeat_times}-{repeat_unit_bases}-{left_flank_bases}-{right_flank_bases}"
-            fh_out.write(f"{chromosome}\t{start}\t{end}\t{name}\t0\t+\n")
-            count += 1
-    logger.info(f"BED file written: {bed_path} ({count:,} sites)")
-    return bed_path
-
-
-def read_bed_keys(bed_path: Path) -> set:
-    """(chrom, start) of every interval of a correspondence BED built by the
-    bedtools_intersect task from this same list -- matching a .list row on
-    (chromosome, location - 1) is then exact, no fuzzy matching needed."""
-    keys = set()
-    with open(bed_path) as fh:
-        for line in fh:
-            cols = line.rstrip("\n").split("\t")
-            if len(cols) >= 2:
-                keys.add((cols[0], cols[1]))
-    return keys
-
-
-def apply_panel_filter_to_list(list_path: Path, panel_bed_path: Path, output_path: Path) -> Path:
-    """Write output_path with every row of the full genome-wide list kept (same
-    row count/order as list_path), but the "filter" column set to "PASS" for
-    sites selected in panel_bed_path and "NO" for every other site.
-
-    This keeps the panel restriction visible/inspectable directly in the
-    list -- every genome-wide site is still there, just tagged.
-    """
-    keys = read_bed_keys(panel_bed_path)
-    pass_count = 0
-    total = 0
-    with open(list_path) as fh_in, open(output_path, "w") as fh_out:
-        header = fh_in.readline()
-        fh_out.write(header)
-        idx = {name: i for i, name in enumerate(header.rstrip("\n").split("\t"))}
-        filter_idx = idx["filter"]
-        for line in fh_in:
-            cols = line.rstrip("\n").split("\t")
-            if not cols or not cols[0]:
-                continue
-            total += 1
-            start = str(int(cols[idx["location"]]) - 1)
-            is_panel = (cols[idx["chromosome"]], start) in keys
-            cols[filter_idx] = "PASS" if is_panel else "NO"
-            if is_panel:
-                pass_count += 1
-            fh_out.write("\t".join(cols) + "\n")
-
-    logger.info(f"Panel-marked list written: {output_path} ({pass_count:,}/{total:,} sites PASS)")
-    return output_path
-
-
-# ---------------------------------------------------------------------------
 # HTML reporting: RUN index -> SAMPLE index -> per-sample RESULT report
 # ---------------------------------------------------------------------------
-
-UNSTABLE_COLUMNS = [
-    "chromosome", "location", "left_flank_bases", "repeat_times",
-    "repeat_unit_bases", "right_flank_bases", "pro_p", "pro_q",
-    "CovReads",
-]
-
 
 def parse_roi_bed(roi_bed_path: Path) -> dict:
     """Map (chromosome, location) -> ROI marker name from a *.roi.bed /
@@ -248,12 +172,6 @@ def row_is_unstable(row: dict) -> bool:
     pval_cutoff). At 0.1 it is msisensor-pro's own call (its threshold
     column, *_unstable holds exactly the sites with pro_p > threshold)."""
     return row["pro_p"] > MSI_PVAL_CUTOFF
-
-
-# Set by report from the workflow's params.p_process (min_reads, pval_cutoff, sample_na_fraction).
-MIN_READS = 200  # a site counts (% unstable, site status) only with >= this many reads
-MSI_PVAL_CUTOFF = 0.1  # a site is unstable when pro_p > this
-SAMPLE_NA_FRACTION = 0.5  # sample status NA when more than this fraction of its loci are NA or MSU
 
 
 def row_is_counted(row: dict) -> bool:
@@ -439,9 +357,6 @@ def extract_library_suffix(lib: str) -> str:
     back to the original string if it doesn't end in "lib<x>"."""
     m = re.search(r"(lib[A-Za-z0-9]+)$", lib, re.IGNORECASE)
     return m.group(1) if m else lib
-
-
-MSI_CONSENSUS_ROI_CUTOFF = 3  # consensus ROI unstable sites >= this -> MSI
 
 
 def sample_status_rule() -> str:
@@ -915,11 +830,6 @@ __HEAD_LINKS__
             .replace("__LIB_COLOR_JSON__", lib_color_json))
 
 
-RUNS_DATA_FILENAME = "index_msi_run.js"
-OUTPUT_INDEX_FILENAME = "index_msi_run.html"
-SAMPLES_DATA_FILENAME = "index_msi_sample.js"
-
-
 def write_data_js(js_path: Path, var_name: str, data) -> None:
     """Write data as a .js file assigning it to window.<var_name>. The HTML pages
     load it via <script src>: fetch() of a local .json is blocked by browsers when
@@ -1235,6 +1145,14 @@ __HEAD_LINKS__
         <tbody id="tbody"></tbody>
       </table>
     </div>
+    <div class="table-foot">
+      <span id="rangeLabel">-</span>
+      <div class="pager">
+        <button id="prevBtn" type="button">&larr; Prev</button>
+        <span id="pageLabel">Page 1</span>
+        <button id="nextBtn" type="button">Next &rarr;</button>
+      </div>
+    </div>
   </div>
   <footer>MSIsensor-pro pipeline - Consolidated report</footer>
   <div class="scroll-top" id="scrollTop">↑</div>
@@ -1261,22 +1179,36 @@ __HEAD_LINKS__
     '<tr><th rowspan="2">Run</th><th rowspan="2">Sample</th><th rowspan="2">% unstable</th>' + groups
     + '<th class="num consensus" colspan="2">UNSTABLE_CONSENSUS</th><th rowspan="2">Status</th></tr><tr>' + sub + '</tr>';
 
-  document.getElementById("tbody").innerHTML = D.samples.map(function(s){
-    var cells = D.library_labels.map(function(l){
-      var e = s.libraries[l];
-      if (!e) return num("-") + num("-");
-      if (e.failed) return '<td colspan="2"><span class="status-pill failed">failed</span></td>';
-      return num(n(e.unstable_region_count)) + num(e.unstable_roi_count);
+  // PAGE_SIZE samples per page, Prev/Next to browse the others.
+  var PAGE_SIZE = 20, page = 0, last = Math.max(0, Math.ceil(D.samples.length / PAGE_SIZE) - 1);
+  function renderPage(){
+    var start = page * PAGE_SIZE;
+    document.getElementById("tbody").innerHTML = D.samples.slice(start, start + PAGE_SIZE).map(function(s){
+      var cells = D.library_labels.map(function(l){
+        var e = s.libraries[l];
+        if (!e) return num("-") + num("-");
+        if (e.failed) return '<td colspan="2"><span class="status-pill failed">failed</span></td>';
+        return num(n(e.unstable_region_count)) + num(e.unstable_roi_count);
+      }).join("");
+      var status = (s.call && s.call !== "NA") ? '<span class="chip ' + (s.call === "MSI" ? "mid" : "low") + '">' + s.call + '</span>'
+                 : s.call === "NA" ? '<span class="lib-empty">NA</span>'
+                          : '<span class="lib-empty">—</span>';
+      return '<tr><td>' + s.run_id + '</td>'
+        + '<td><a href="./__RUNS_DIR__/' + s.run_id + '/' + s.sample_name + '_index_sample.html">' + s.sample_name + '</a></td>'
+        + num(s.pct_region_unstable === null ? "-" : s.pct_region_unstable + "%") + cells
+        + '<td class="num tabular consensus">' + n(s.consensus_total) + '</td><td class="num tabular consensus">' + n(s.consensus_roi) + '</td>'
+        + '<td>' + status + '</td></tr>';
     }).join("");
-    var status = (s.call && s.call !== "NA") ? '<span class="chip ' + (s.call === "MSI" ? "mid" : "low") + '">' + s.call + '</span>'
-               : s.call === "NA" ? '<span class="lib-empty">NA</span>'
-                        : '<span class="lib-empty">—</span>';
-    return '<tr><td>' + s.run_id + '</td>'
-      + '<td><a href="./__RUNS_DIR__/' + s.run_id + '/' + s.sample_name + '_index_sample.html">' + s.sample_name + '</a></td>'
-      + num(s.pct_region_unstable === null ? "-" : s.pct_region_unstable + "%") + cells
-      + '<td class="num tabular consensus">' + n(s.consensus_total) + '</td><td class="num tabular consensus">' + n(s.consensus_roi) + '</td>'
-      + '<td>' + status + '</td></tr>';
-  }).join("");
+    var total = D.samples.length;
+    document.getElementById("rangeLabel").textContent = total
+      ? "Samples " + (start + 1) + "\u2013" + Math.min(start + PAGE_SIZE, total) + " of " + total.toLocaleString("en-US") : "No sample";
+    document.getElementById("pageLabel").textContent = "Page " + (page + 1) + " / " + (last + 1);
+    document.getElementById("prevBtn").disabled = page <= 0;
+    document.getElementById("nextBtn").disabled = page >= last;
+  }
+  document.getElementById("prevBtn").addEventListener("click", function(){ if (page > 0){ page--; renderPage(); } });
+  document.getElementById("nextBtn").addEventListener("click", function(){ if (page < last){ page++; renderPage(); } });
+  renderPage();
 
   var scrollTop = document.getElementById("scrollTop");
   window.addEventListener("scroll", function(){ scrollTop.classList.toggle("show", window.pageYOffset > 300); });
@@ -1302,9 +1234,9 @@ __HEAD_LINKS__
 # ---------------------------------------------------------------------------
 
 def index(args) -> None:
-    """Add this run's viz/runs/<run_id>/ (moved, not copied, from the
-    ta03_msi_report call folder named by --run-outputs) to the reports folder,
-    then rebuild the dashboard from every viz/runs/*/: index_msi_run.js and
+    """Add this run's viz/runs/<run_id>/ (copied from the ta03_report call
+    folder named by --run-outputs, so the sprocket run stays complete) to the
+    reports folder, then rebuild the dashboard from every viz/runs/*/: index_msi_run.js and
     index_msi_sample.js are rewritten, index_msi_run.html and
     index_msi_sample.html only when their template changed. Re-runnable at
     any time (e.g. after deleting a run folder)."""
@@ -1319,7 +1251,7 @@ def index(args) -> None:
             if dest.exists():
                 shutil.rmtree(dest)
                 logger.info(f"Replacing {dest}")
-            shutil.move(str(run_dir), str(dest))
+            shutil.copytree(run_dir, dest)
             logger.info(f"Added {dest}")
 
     runs = rebuild_runs_manifest(viz_dir)
@@ -1331,9 +1263,6 @@ def index(args) -> None:
 # ---------------------------------------------------------------------------
 # report: publish raw outputs to data/, (re)generate viz/
 # ---------------------------------------------------------------------------
-
-SAMPLES_TSV_COLUMNS = ["sample_name", "library", "bam_path", "status", "all", "unstable", "dis", "summary"]
-
 
 def read_samples_tsv(path: Path) -> list:
     """Rows of the samples.tsv the workflow writes (see module docstring)."""
@@ -1390,7 +1319,7 @@ def report(args) -> None:
         sample_key = (rel_dir / sample_name).as_posix()
         bam_name = Path(row["bam_path"]).name
         if row["status"] != "ok":
-            logger.error(f"Failed on {bam_name} (see the ta02_msisensorpro_pro call stderr)")
+            logger.error(f"Failed on {bam_name} (see the ta02_sensorpro_pro call stderr)")
             failures.append(bam_name)
             sample_metas.append({"sample_name": sample_name, "library": library, "sample_key": sample_key, "failed": True})
             continue
@@ -1419,19 +1348,10 @@ def main():
     parser = argparse.ArgumentParser(description="Python steps of the msi_detection-0.1.0.wdl workflow.")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("list-to-bed", help="MSIsensor-pro .list -> BED6.")
-    p.add_argument("list")
-    p.add_argument("output")
-
-    p = sub.add_parser("mark-list", help="Full .list, filter=PASS for sites in the panel BED, NO otherwise.")
-    p.add_argument("list")
-    p.add_argument("bed")
-    p.add_argument("output")
-
     p = sub.add_parser("index", help="Add a run's pages to the reports folder and rebuild the dashboard.")
     p.add_argument("--viz", required=True, help="Reports folder (VIZ of BASH.sprocket.sh).")
     p.add_argument("--run-outputs", default=None,
-                   help="outputs.json of a run: its report_viz runs/<run_id>/ is moved into --viz/runs/.")
+                   help="outputs.json of a run: its report_viz runs/<run_id>/ is copied into --viz/runs/.")
 
     p = sub.add_parser("report", help="Publish raw outputs to data/ and generate this run's viz/runs/<run_id>/ pages.")
     p.add_argument("--run-id", required=True)
@@ -1454,11 +1374,7 @@ def main():
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s",
                         datefmt="%Y-%m-%d %H:%M:%S")
-    if args.command == "list-to-bed":
-        convert_list_to_bed(Path(args.list), Path(args.output))
-    elif args.command == "mark-list":
-        apply_panel_filter_to_list(Path(args.list), Path(args.bed), Path(args.output))
-    elif args.command == "index":
+    if args.command == "index":
         index(args)
 
 

@@ -1,27 +1,28 @@
-# Production: the cluster's Slurm + Apptainer.
-# Used by `CONFIG=backends.conf/sprocket.prod.toml BASH.sprocket.sh prod_params.json`.
+# Development: Slurm + Apptainer on this workstation (single-node Slurm
+# installed by slurm-local/install.sh), same backend as production with local
+# paths. Default config of BASH.sprocket.sh.
 [run]
 backend = "slurm"
 # Required by the slurm_apptainer backend (experimental in sprocket).
 experimental_features_enabled = true
 
-# sprocket submits each task with sbatch and runs
-# it with `apptainer exec` in the task's requirements.container -- in the prod
-# params JSON, local images as file:///bioinfo/apptainer_sif/<tool>_<version>.sif
-# (e.g. msisensorpro_container). Values taken from backends.conf/slurm_apptainer.conf.
+[run.workflow.scatter]
+concurrency = 10        # plafond d'éléments de scatter en parallèle
+
 [run.backends.slurm]
 type = "slurm_apptainer"
-job_name_prefix = "msi_"
-# Seconds between two sacct polls of the running jobs.
-interval = 30
+max_concurrency = 50  # limite donc le rythme de soumission
+job_name_prefix = "msi"
+# Seconds between two sacct polls of the running jobs (short: local tests).
+interval = 5
 
-# Extra sbatch arguments for every task: partition and 600 min limit, as in
-# Cromwell. The partition is given here rather than as default_slurm_partition
-# (checked with `scontrol` when the engine starts).
 [run.backends.slurm.sbatch]
-args = ["--partition=prod", "--time=600"]
+args = ["--partition=prod"]
 
 [run.backends.slurm.apptainer]
 executable = "apptainer"
-# Shared .sif cache (docker:// images pulled once, reused by every run).
-image_cache_dir = "/scratch/sprocket/apptainer_cache"
+
+[run.task]
+cache = "on"
+digests = "strongish"
+cache_dir = "/media/jp/SSD2/CHU/test/work/sprocket_cache"
