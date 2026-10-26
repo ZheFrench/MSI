@@ -21,10 +21,12 @@ version 1.3
 # Apptainer image (requirements.container) and call the tool directly: the
 # backend runs it (sprocket slurm_apptainer, on this workstation's single-node
 # Slurm in development, on the cluster in production).
-# The pure-Python steps are subcommands of one script, run in the generic
-# python3 image (helper_container): msi_main_helper (msi_detection_main_p.py:
-# list/BED conversions and this run's HTML reports). The all-runs dashboard is
-# built after the workflow by msi_detection_post_p.py index.
+# The pure-Python steps are subcommands of two scripts, run in the generic
+# python3 image (helper_container): msi_main_helper (msi_detection_main_p.py,
+# list/BED conversions) and msi_report_helper (msi_detection_report_p.py, this
+# run's HTML reports). Two files so that editing the report does not
+# invalidate the call cache of the list steps (whole-genome outputs). The
+# all-runs dashboard is built after the workflow by msi_detection_post_p.py index.
 #
 # Calls are named after their line on the diagram, t<line><rank>_<step>
 # (a: BAMs, b: msisensor-pro list, c: ROI markers; WDL names can't start
@@ -120,6 +122,7 @@ workflow msi_detection {
 		Array[String] exclude_prefixes = ["TN", "TPH"]
 
 		File msi_main_helper
+		File msi_report_helper
 
 		RunParams params
 	}
@@ -271,7 +274,7 @@ workflow msi_detection {
 			pval_cutoff = params.p_process.pval_cutoff,
 			sample_na_fraction = params.p_process.sample_na_fraction,
 			consensus_roi_cutoff = params.p_process.consensus_roi_cutoff,
-			msi_helper = msi_main_helper,
+			msi_helper = msi_report_helper,
 	}
 
 	output {
@@ -294,7 +297,8 @@ workflow msi_detection {
 		bedtools_container: "bedtools image [params/containers.json: apptainer-recipes/bedtools-2.31.1.sif]; file:///...sif on slurm_apptainer."
 		helper_container: "Generic python3 + awk image of the python/bash tasks [params/containers.json: apptainer-recipes/python-3.12.sif]; the script is not in it."
 		exclude_prefixes: "BAMs whose name starts with one of these are not analysed (controls) [default: TN, TPH]."
-		msi_main_helper: "msi_detection_main_p.py, given to list_to_bed, mark_list and report as a File [params/containers.json: scripts/msi_detection_main_p.py]."
+		msi_main_helper: "msi_detection_main_p.py, given to list_to_bed and mark_list as a File [params/containers.json: scripts/msi_detection_main_p.py]."
+		msi_report_helper: "msi_detection_report_p.py, given to the report task as a File [params/containers.json: scripts/msi_detection_report_p.py]."
 	}
 }
 
@@ -646,7 +650,7 @@ task report {
 		pval_cutoff: "A site is unstable when its p-value is above this."
 		sample_na_fraction: "Sample status NA when more than this fraction of its loci listed on its sample page (a p-value in at least one library, or an ROI marker) are NA or MSU."
 		consensus_roi_cutoff: "Sample status MSI when at least this many ROI markers are unstable in consensus (else MSS)."
-		msi_helper: "Path to msi_detection_main_p.py."
+		msi_helper: "Path to msi_detection_report_p.py."
 	}
 
 	requirements {

@@ -3,9 +3,10 @@
 msi_detection_post_p.py
 
 Run after the msi_detection-0.1.0.wdl workflow, outside it (it writes into
-the reports folder): the steps inside the workflow are in
-msi_detection_main_p.py, whose page code it reuses (import: both scripts sit
-in scripts/).
+the reports folder). The steps inside the workflow are in
+msi_detection_main_p.py (reference lists) and msi_detection_report_p.py (this
+run's report), whose page code it reuses (import: both scripts sit in
+scripts/).
 
     index        --viz DIR [--run-outputs outputs.json]
         Copies the run's runs/<run_id>/ into DIR/runs/, then rebuilds the
@@ -25,10 +26,10 @@ import shutil
 import sys
 from pathlib import Path
 
-# msi_detection_main_p.py sits next to this script (scripts/): importable
+# msi_detection_report_p.py sits next to this script (scripts/): importable
 # whatever the current directory or python's -I/-P flags.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from msi_detection_main_p import (HEAD_LINKS, OUTPUT_INDEX_FILENAME, REPORT_CSS,  # noqa: E402
+from msi_detection_report_p import (HEAD_LINKS, OUTPUT_INDEX_FILENAME, REPORT_CSS,  # noqa: E402
                                   RUNS_DIRNAME, logger, run_data_js_path, write_data_js)
 
 # Dashboard data files, in the reports folder

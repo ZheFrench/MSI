@@ -1,6 +1,5 @@
 #!/bin/sh
 
-
 set -eu
 
 WDL_DIR=/media/jp/SSD2/CHU/code/pipeline-jp

@@ -76,6 +76,7 @@ Forgetting it stops sprocket before anything runs (`missing required input`).
 | `msi_detection.bedtools_container` | `file:///media/jp/SSD2/CHU/code/pipeline-jp/apptainer-recipes/bedtools-2.31.1.sif` |
 | `msi_detection.helper_container` | `file:///media/jp/SSD2/CHU/code/pipeline-jp/apptainer-recipes/python-3.12.sif` |
 | `msi_detection.msi_main_helper` | `/media/jp/SSD2/CHU/code/pipeline-jp/scripts/msi_detection_main_p.py` |
+| `msi_detection.msi_report_helper` | `/media/jp/SSD2/CHU/code/pipeline-jp/scripts/msi_detection_report_p.py` |
 
 The images of the scripts' own Slurm jobs follow `WDL_DIR`: `$WDL_DIR/apptainer-recipes/python-3.12.sif`
 (`python_slurm_job` of `BASH.sprocket.cron.sh` / `BASH.sprocket.batch.sh`: pick_run, experiment,
@@ -162,12 +163,15 @@ start with a digit, hence the letter; sprocket's `calls/<call>/` folders group t
 | `ta02_sensorpro_pro` × N (`msisensorpro.pro`) | msisensor-pro | Scatter, one per BAM: `msisensor-pro pro -d <analysis list> -t <bam> -b threads -c coverage_threshold`. A failure on any BAM fails the workflow. | `<sample>`, `_all`, `_dis`, `_unstable` |
 | `ta03_report` (`report`) | python image | Gets every BAM's results as `File`s, copies them to `data/<run_id>/<library>/`, builds this run's reports in `viz/runs/<run_id>/` (run page, sample pages; the all-runs dashboard is built by `index` after the run) and writes the log; writes nothing outside its task. | `viz/`, `data/`, `log/` (`Directory`) |
 
-The python steps of the workflow are subcommands of
-[`scripts/msi_detection_main_p.py`](scripts/msi_detection_main_p.py) (`msi_main_helper`): `list-to-bed`,
-`mark-list` (the reference list) and `report`. It is self-contained (a WDL task gets it alone).
-[`scripts/msi_detection_post_p.py`](scripts/msi_detection_post_p.py) only holds `index`, run after the
-workflow by the BASH scripts; it imports the page code (CSS, `<head>`, `.js` writer) of
-`msi_detection_main_p.py`, next to it in `scripts/`.
+The python steps of the workflow are subcommands of two self-contained scripts (a WDL task gets
+its script alone): [`scripts/msi_detection_main_p.py`](scripts/msi_detection_main_p.py)
+(`msi_main_helper`: `list-to-bed`, `mark-list`, the reference list) and
+[`scripts/msi_detection_report_p.py`](scripts/msi_detection_report_p.py) (`msi_report_helper`:
+`report`). They are kept apart because sprocket's call cache keys on each task's input files:
+editing the report must not invalidate the list steps, whose outputs are whole-genome lists
+(~100 MB each). [`scripts/msi_detection_post_p.py`](scripts/msi_detection_post_p.py) only holds
+`index`, run after the workflow by the BASH scripts; it imports the page code (CSS, `<head>`,
+`.js` writer) of `msi_detection_report_p.py`, next to it in `scripts/`.
 
 ### Resources
 
@@ -223,7 +227,8 @@ Optional members can be left out of their object.
 | | `p_process.consensus_roi_cutoff` | yes | Reports: sample status MSI when at least this many ROI markers are unstable in consensus, MSS otherwise (e.g. 3) |
 | `msisensorpro_container`, `bedtools_container` | | yes (`params/containers.json`) | Image of each tool (see below) |
 | `helper_container` | | yes (`params/containers.json`) | Generic python3 + awk image of the python/bash tasks |
-| `msi_main_helper` | | yes (`params/containers.json`) | Python steps (reference list, report), a `File` |
+| `msi_main_helper` | | yes (`params/containers.json`) | Python reference list steps, a `File` |
+| `msi_report_helper` | | yes (`params/containers.json`) | Python report step, a `File` |
 
 The genome, panel and ROI must use the same build as the BAMs (e.g. GRCh37 + `ROI.hg19.bed`).
 
@@ -278,8 +283,8 @@ inputs and its work directory (nothing else of the host is visible).
 | Slurm | single node on this workstation (`backends.conf/slurm-local/install.sh`) | the cluster, partition `prod`, 600 min |
 | `*_container` (`params/containers.json`) | `file://.../apptainer-recipes/<tool>.sif` | `file:///bioinfo/apptainer_sif/<tool>_<version>.sif` |
 
-The workflow's python script is deliberately **not** in the image: it is a `File` input (`msi_main_helper`),
-versioned with the WDL, so editing it needs no image rebuild (a frozen image with the script inside
+The workflow's python scripts are deliberately **not** in the image: they are `File` inputs (`msi_main_helper`, `msi_report_helper`),
+versioned with the WDL, so editing them needs no image rebuild (a frozen image with the scripts inside
 only if the workflow is ever distributed without this folder).
 
 Every task only reads its inputs and writes in its own directory (the run directory is a
@@ -293,7 +298,8 @@ written by `index`, after the run.
 | `msi_detection-0.1.0.wdl` | The workflow |
 | `module/msisensorpro-1.3.0.wdl`, `module/bedtools-2.31.1.wdl` | Tool modules (tasks `scan`, `pro`; `intersect`) |
 | `scripts/msi_detection_pre_p.py` | Before the workflow: params JSON of the runs left to analyse (run by `BASH.sprocket.cron.sh`) |
-| `scripts/msi_detection_main_p.py` | Python steps of the workflow (`msi_main_helper`): reference list, this run's report (page icon embedded) |
+| `scripts/msi_detection_main_p.py` | Reference list steps of the workflow (`msi_main_helper`) |
+| `scripts/msi_detection_report_p.py` | Report step of the workflow (`msi_report_helper`): this run's pages (page icon embedded) |
 | `scripts/msi_detection_post_p.py` | After the workflow: `index`, the all-runs dashboard (run by `BASH.sprocket.cron.sh` / `BASH.sprocket.batch.sh`) |
 | `apptainer-recipes/python-3.12.def` | Generic python3 + awk image of the python/bash tasks |
 | `params/containers.json` | Images and python helpers of the workflow (passed to every `sprocket run`) |
