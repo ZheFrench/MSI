@@ -1,0 +1,57 @@
+Bootstrap: docker
+From: ubuntu:22.04
+
+%labels
+    Author claude
+    Software msisensor-pro
+    Source https://github.com/xjtu-omics/msisensor-pro
+
+%help
+    Conteneur Apptainer contenant MSIsensor-pro, compilé depuis les sources
+    (https://github.com/xjtu-omics/msisensor-pro).
+
+    Utilisation :
+        apptainer run msisensor-pro.sif msisensor-pro --help
+        apptainer exec msisensor-pro.sif msisensor-pro msi -d ref.list -t tumor.bam -o output
+
+%post
+    export DEBIAN_FRONTEND=noninteractive
+
+    # Dépendances nécessaires (cf. doc officielle)
+    apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        git \
+        wget \
+        ca-certificates \
+        libbz2-dev \
+        zlib1g-dev \
+        libcurl4-openssl-dev \
+        libncurses5-dev \
+        libncursesw5-dev \
+        liblzma-dev \
+        pkg-config \
+        cmake
+
+    # Récupération des sources et compilation
+    cd /opt
+    git clone --recursive https://github.com/xjtu-omics/msisensor-pro.git
+    cd msisensor-pro
+    ./INSTALL
+
+    # Installation du binaire dans un répertoire standard du PATH
+    mv binary/msisensor-pro /usr/local/bin/
+    chmod +x /usr/local/bin/msisensor-pro
+
+    # Nettoyage
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+
+%environment
+    export PATH=/usr/local/bin:$PATH
+    export LC_ALL=C
+
+%runscript
+    exec msisensor-pro "$@"
+
+%test
+    msisensor-pro --help || true
