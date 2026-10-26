@@ -1,19 +1,20 @@
 # msi_detection-0.1.0.wdl
 
-Everything about the WDL workflow lives in this folder (`pipeline-jp/wdl/`).
+Everything about the WDL workflow lives in this folder (`pipeline-jp/`).
 
 
-WDL port of [`run_msisensor2.0.1.py`](../python-pipeline/run_msisensor2.0.1.py) (see [its README](../python-pipeline/README.md)), run with
+WDL port of [`run_msisensor2.0.1.py`](python-pipeline/run_msisensor2.0.1.py) (see [its README](python-pipeline/README.md)), run with
 [sprocket](https://sprocket.bio). It runs MSIsensor-pro (tumor-only) on every BAM of a run directory,
 restricts the analysis to a sequencing panel and/or the classic MSI markers (BAT26, NR21, ...), and
 updates the same HTML reports as the Python pipeline (all runs → one run → one sample).
 
-![msi_detection metro map](diagram/msi_detection_metromap.preview.png)
+[![msi_detection metro map](diagram/msi_detection_metromap.preview.png)](diagram/msi_detection_metromap.preview.png)
 
-(Editable diagram: [`diagram/msi_detection_metromap.drawio`](diagram/msi_detection_metromap.drawio); re-export the PNG with `diagram/BASH.render_png.sh`.)
+(Full-size image: [`diagram/msi_detection_metromap.preview.png`](diagram/msi_detection_metromap.preview.png); editable diagram: [`diagram/msi_detection_metromap.drawio`](diagram/msi_detection_metromap.drawio); re-export the PNG with [`diagram/BASH.render_png.sh`](diagram/BASH.render_png.sh).)
 
 ## Contents
 
+- [Configuration (to set at install)](#configuration-to-set-at-install)
 - [Quick start](#quick-start)
 - [Tasks](#tasks)
 - [Inputs](#inputs)
@@ -22,21 +23,74 @@ updates the same HTML reports as the Python pipeline (all runs → one run → o
 - [Files](#files)
 - [HTML documentation](#html-documentation)
 
+## Configuration (to set at install)
+
+Nothing is read from the environment: every path and Slurm setting is hardcoded in the files below
+(values here: this workstation). Every path must be the same on all the Slurm nodes (shared file
+system): the containers mount them at the same path.
+
+**`BASH.sprocket.cron.sh`** (cron mode)
+
+| Variable / line | Value | Role |
+|---|---|---|
+| `PATH` (line 6, commented) | `/home/jp/.cargo/bin:$PATH` | cron's PATH is minimal: uncomment it if `sprocket` is not found |
+| `WDL_DIR` | `/media/jp/SSD2/CHU/code/pipeline-jp` | this folder |
+| `VIZ` | `/media/jp/SSD2/CHU/test/viz` | reports and dashboard (written by `index`) |
+| `WORK` | `/media/jp/SSD2/CHU/test/work` | sprocket's runs (`sprocket/`) and the params JSON (`config/`) |
+| `RUNS_DIR` | `/media/jp/SSD2/CHU/input/fake-data/runs` | one folder per sequencing run, with its `SampleSheet.csv` |
+| `BAM_ROOT` | `/media/jp/SSD2/CHU/input/fake-data/fake_bam` | one BAM folder per Experiment Name |
+| `LOCKER_ADIVAR` | `/media/jp/SSD2/CHU/config/adivar-testNS.json` | ADIVAR's locker (read only) |
+| `LOCKER_MSI` | `/media/jp/SSD2/CHU/test/msi-sensor.txt` | MSI locker (runs already taken), created if missing |
+| `srun` in `python_slurm_job` | `--partition=prod --cpus-per-task=1 --mem=1G` | Slurm job of the python steps (`pick_run`, `pre_process`, `index`) |
+
+**`BASH.sprocket.batch.sh`** (batch mode): `WDL_DIR` and the same `srun` line (its output folder
+`OUT_DIR`, which gets `viz/` and `work/`, is a required argument).
+
+**`backends.conf/sprocket.prod.toml`**
+
+| Key | Value | Role |
+|---|---|---|
+| `[run.backends.slurm.sbatch] args` | `["--partition=prod"]` | partition (and any other `sbatch` option) of the tasks |
+| `[run.task] cache_dir` | `/media/jp/SSD2/CHU/test/work/sprocket_cache` | sprocket's call cache (shared by all the runs) |
+| `[run.backends.slurm] interval` | `5` | seconds between two `sacct` polls: short for local tests, raise it on the cluster |
+| `max_concurrency`, `[run.workflow.scatter] concurrency` | `50`, `10` | jobs submitted at once, scatter elements in parallel |
+
+**`params/template.json`** (copied by `pre_process` for each run; `run` and `samples` stay empty, filled per run)
+
+| Key | Value |
+|---|---|
+| `msi_detection.references.genome` | `/media/jp/SSD2/CHU/refData/hg19/Homo_sapiens.GRCh37.75.wout_contigs.fa` |
+| `msi_detection.references.bed_panel` | `/media/jp/SSD2/CHU/refData/MSI/static/Panel_Juno_v3_Juno.amplicons.bed` |
+| `msi_detection.references.bed_roi` | `/media/jp/SSD2/CHU/refData/MSI/static/ROI.hg19.bed` |
+| `msi_detection.params` | `threads` (8), `coverage_threshold`, `p_process` thresholds |
+
+**`msi_detection-0.1.0.wdl`** (`input` section, lines 114-121; or overridden in the params JSON):
+`msisensorpro_container`, `bedtools_container`, `helper_container` (`file://<WDL_DIR>/apptainer-recipes/<tool>.sif`)
+and `msi_main_helper`, `msi_post_helper` (`<WDL_DIR>/scripts/...`).
+
+**crontab** (not in this folder), for example every 30 min with a log:
+
+```sh
+*/30 * * * * /media/jp/SSD2/CHU/code/pipeline-jp/BASH.sprocket.cron.sh >> /media/jp/SSD2/CHU/test/cron.log 2>&1
+```
+
 ## Quick start
 
 ```sh
-cd /media/jp/SSD2/CHU/code/pipeline-jp/wdl
-./BASH.sprocket.sh                    # cron mode: pre_process picks the run left to analyse, then runs it
-./BASH.sprocket.batch.sh CONFIG_DIR   # batch mode: every params JSON of CONFIG_DIR
+cd /media/jp/SSD2/CHU/code/pipeline-jp
+./BASH.sprocket.cron.sh                       # cron mode: pre_process picks the run left to analyse, then runs it
+./BASH.sprocket.batch.sh CONFIG_DIR OUT_DIR   # batch mode: every params JSON of CONFIG_DIR, outputs in OUT_DIR
 ```
 
-`BASH.sprocket.sh` (cron) first runs `msi_detection_pre_p.py`, which writes the params JSON of
-the run finished by ADIVAR and not yet in the MSI locker (moved to `$WORK/config/`) and adds that run
-to the locker. Then both scripts, for each params JSON:
+`BASH.sprocket.cron.sh` (cron) first runs `msi_detection_pre_p.py --print-run`, which reads the two
+lockers only and prints the run finished by ADIVAR and not yet in the MSI locker. Then
+`msi_detection_pre_p.py`, whose container gets only that run's `$RUNS_DIR/<run>/SampleSheet.csv` (not
+the whole `$RUNS_DIR`), writes its params JSON (in `$WORK/config/`) and adds the run to the locker.
+Then both scripts, for each params JSON:
 
 1. sets the destinations, hardcoded in the script (not in the params): `VIZ` (reports folder) and
    `WORK` (sprocket's runs), created if needed;
-2. runs `sprocket run -s -c $SPROCKET_CONFIG` (default `backends.conf/sprocket.local.toml`) in
+2. runs `sprocket run -s -c $SPROCKET_CONFIG` (`backends.conf/sprocket.prod.toml`) in
    `$WORK/sprocket/runs/msi_detection/<timestamp>/`, one folder per task;
 3. runs `msi_detection_post_p.py index` as a Slurm job (`srun`, in `python-3.12.sif`): copies the run's
    `viz/runs/<run_id>/` into `$VIZ/runs/` and rebuilds the dashboard from every
@@ -49,10 +103,10 @@ current reports would not be reproducible nor cacheable). `index` can be re-run 
 after deleting a run folder. Everything else stays in sprocket's run folder (paths in its
 `outputs.json`), every task keeping its `work/` folder (~300 MB per run).
 
-Run by hand:
+Run by hand, with a params JSON written by `pre_process` (or a filled copy of `params/template.json`):
 
 ```sh
-sprocket run -s -c backends.conf/sprocket.local.toml msi_detection-0.1.0.wdl @params/example_params_1.json
+sprocket run -s -c backends.conf/sprocket.prod.toml msi_detection-0.1.0.wdl @$WORK/config/<date>-<run>-<Experiment Name>.json
 ```
 
 ## Tasks
@@ -93,9 +147,9 @@ reference list) and [`scripts/msi_detection_post_p.py`](scripts/msi_detection_po
 
 ## Inputs
 
-Keys of the params JSON, all prefixed `msi_detection.` (see [`params/example_params_1.json`](params/example_params_1.json)).
+Keys of the params JSON, all prefixed `msi_detection.` (see [`params/template.json`](params/template.json)).
 `inputs`, `references` and `params` are objects (WDL structs); where results go is not a
-params key (see `BASH.sprocket.sh`):
+params key (see `BASH.sprocket.cron.sh`):
 
 ```json
 "msi_detection.inputs":     {"run": "...", "samples": ["E25D04852T", "..."]},
@@ -140,7 +194,7 @@ data/<run_id>/<library>/<sample>{,_all,_dis,_unstable}
 log/<run_id>_MSI_<timestamp>.log
 ```
 
-sprocket's own run directory (with `BASH.sprocket.sh`: `$WORK/sprocket/runs/msi_detection/<timestamp>/`, `_latest` → last run):
+sprocket's own run directory (with `BASH.sprocket.cron.sh`: `$WORK/sprocket/runs/msi_detection/<timestamp>/`, `_latest` → last run):
 
 ```
 output.log        sprocket's log
@@ -173,7 +227,7 @@ inputs and its work directory (nothing else of the host is visible).
 
 | | Development | Production |
 |---|---|---|
-| Config | `backends.conf/sprocket.local.toml` | `backends.conf/sprocket.prod.toml` |
+| Config | `backends.conf/sprocket.prod.toml` | `backends.conf/sprocket.prod.toml` |
 | Slurm | single node on this workstation (`backends.conf/slurm-local/install.sh`) | the cluster, partition `prod`, 600 min |
 | `*_container` | WDL default: `file://.../apptainer-recipes/<tool>.sif` | override in the prod JSON: `file:///bioinfo/apptainer_sif/<tool>_<version>.sif` |
 
@@ -191,14 +245,14 @@ written by `index`, after the run.
 |---|---|
 | `msi_detection-0.1.0.wdl` | The workflow |
 | `module/msisensorpro-1.3.0.wdl`, `module/bedtools-2.31.1.wdl` | Tool modules (tasks `scan`, `pro`; `intersect`) |
-| `scripts/msi_detection_pre_p.py` | Before the workflow: params JSON of the runs left to analyse (run by `BASH.sprocket.sh`) |
+| `scripts/msi_detection_pre_p.py` | Before the workflow: params JSON of the runs left to analyse (run by `BASH.sprocket.cron.sh`) |
 | `scripts/msi_detection_main_p.py` | Reference list steps (`msi_main_helper`) |
 | `scripts/msi_detection_post_p.py` | Report and dashboard steps (`msi_post_helper`, and `index` after the run; page icon embedded) |
 | `apptainer-recipes/python-3.12.def` | Generic python3 + awk image of the python/bash tasks |
-| `params/example_params_1.json` | Params for Run141_Juno (GRCh37, Juno v3 panel, ROI hg19) |
-| `backends.conf/sprocket.local.toml`, `sprocket.prod.toml` | sprocket configs: Slurm + Apptainer, this workstation / the cluster |
+| `params/template.json` | Params JSON template (GRCh37, Juno v3 panel, ROI hg19): `pre_process` fills `run` per run |
+| `backends.conf/sprocket.prod.toml` | sprocket config: Slurm + Apptainer |
 | `backends.conf/slurm-local/` | Single-node Slurm of this workstation (`sudo ./install.sh`) |
-| `BASH.sprocket.sh`, `BASH.sprocket.batch.sh` | `sprocket run` with this folder's config: cron mode (run found by pre_process) / batch mode (folder of params JSON) |
+| `BASH.sprocket.cron.sh`, `BASH.sprocket.batch.sh` | `sprocket run` with this folder's config: cron mode (run found by pre_process) / batch mode (folder of params JSON) |
 | `BASH.doc.sh`, `apptainer-recipes/sprocket-doc-0.31.0.def` | HTML documentation (`docs/`, generated) and its image |
 | `diagram/msi_detection_metromap.drawio` / `.preview.png`, `diagram/BASH.render_png.sh` | Workflow diagram, its PNG export |
 
