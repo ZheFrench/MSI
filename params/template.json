@@ -17,7 +17,8 @@
         "p_process": {
             "min_reads": 200,
             "pval_cutoff": 0.1,
-            "sample_na_fraction": 0.5
+            "sample_na_fraction": 0.5,
+            "consensus_roi_cutoff": 3
         }
     }
 }

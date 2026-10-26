@@ -16,15 +16,15 @@ version 1.3
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-# WDL port of run_msisensor2.0.1.py. Every external tool is wrapped in a
+# Every external tool is wrapped in a
 # module (module/<tool>.wdl, imported below), whose tasks only name their
 # Apptainer image (requirements.container) and call the tool directly: the
 # backend runs it (sprocket slurm_apptainer, on this workstation's single-node
 # Slurm in development, on the cluster in production).
-# The pure-Python steps are subcommands of two scripts, run in the generic
-# python3 image (helper_container): msi_main_helper (msi_detection_main_p.py,
-# list/BED conversions) and msi_post_helper (msi_detection_post_p.py, HTML
-# reports).
+# The pure-Python steps are subcommands of one script, run in the generic
+# python3 image (helper_container): msi_main_helper (msi_detection_main_p.py:
+# list/BED conversions and this run's HTML reports). The all-runs dashboard is
+# built after the workflow by msi_detection_post_p.py index.
 #
 # Calls are named after their line on the diagram, t<line><rank>_<step>
 # (a: BAMs, b: msisensor-pro list, c: ROI markers; WDL names can't start
@@ -60,12 +60,14 @@ struct References {
 
 # Run settings, given in the params JSON as one object:
 #   "msi_detection.params": {"threads": 8, "coverage_threshold": 1, "recursive": true,
-#                            "p_process": {"min_reads": 200, "pval_cutoff": 0.1, "sample_na_fraction": 0.5}}
+#                            "p_process": {"min_reads": 200, "pval_cutoff": 0.1, "sample_na_fraction": 0.5,
+#                                          "consensus_roi_cutoff": 3}}
 # p_process: report settings (ta03_report), msisensor-pro itself doesn't use them.
 struct PProcess {
 	Int min_reads
 	Float pval_cutoff
 	Float sample_na_fraction
+	Int consensus_roi_cutoff
 }
 
 struct RunParams {
@@ -76,12 +78,12 @@ struct RunParams {
 }
 
 # Where results go is not a workflow input: every output stays in sprocket's
-# run folder (the workflow writes nothing outside its tasks). BASH.sprocket.sh
+# run folder (the workflow writes nothing outside its tasks). BASH.sprocket.cron.sh
 # sets the destinations: -o for sprocket's runs, and the reports folder that
 # `msi_detection_post_p.py index` fills after each run (adds runs/<run_id>/,
 # rebuilds the dashboard of every run). The scan is not redone from one run
-# to the next: sprocket's call cache reuses the previous result (same genome,
-# image and threads).
+# to the next: sprocket's call cache reuses the previous result (same genome
+# and image).
 
 workflow msi_detection {
 
@@ -109,16 +111,15 @@ workflow msi_detection {
 
 		References references
 
-		# Tool images and python helper: set here, not in the params JSON
-		# (still overridable there: production images in the prod params JSON).
-		String msisensorpro_container = "file:///media/jp/SSD2/CHU/code/pipeline-jp/wdl/apptainer-recipes/msisensor-pro-1.3.0.sif"
-		String bedtools_container = "file:///media/jp/SSD2/CHU/code/pipeline-jp/wdl/apptainer-recipes/bedtools-2.31.1.sif"
-		String helper_container = "file:///media/jp/SSD2/CHU/code/pipeline-jp/wdl/apptainer-recipes/python-3.12.sif"
+		# Tool images and python helpers: no default, given by params/containers.json
+		# (passed before the run's params JSON, which can still override them).
+		String msisensorpro_container
+		String bedtools_container
+		String helper_container
 		# Controls, not analysed: BAMs whose name starts with one of these.
 		Array[String] exclude_prefixes = ["TN", "TPH"]
 
-		File msi_main_helper = "/media/jp/SSD2/CHU/code/pipeline-jp/wdl/scripts/msi_detection_main_p.py"
-		File msi_post_helper = "/media/jp/SSD2/CHU/code/pipeline-jp/wdl/scripts/msi_detection_post_p.py"
+		File msi_main_helper
 
 		RunParams params
 	}
@@ -129,7 +130,6 @@ workflow msi_detection {
 
 	call find_bams as ta01_find_bams {
 		input:
-			threads = params.threads,
 			container = helper_container,
 			input_dir = inputs.run,
 			recursive = params.recursive,
@@ -142,7 +142,6 @@ workflow msi_detection {
 	if (!defined(references.pro_list)) {
 		call msisensorpro.scan as tb01_sensorpro_scan {
 			input:
-				threads = params.threads,
 				genome = references.genome,
 				container = msisensorpro_container,
 		}
@@ -152,7 +151,6 @@ workflow msi_detection {
 
 	call list_to_bed as tb02_list_to_bed {
 		input:
-			threads = params.threads,
 			container = helper_container,
 			msi_list = msi_list,
 			output_name = list_stem + ".bed",
@@ -162,7 +160,6 @@ workflow msi_detection {
 	if (defined(references.bed_panel)) {
 		call align_chrom_naming as tb03_panel_chrom {
 			input:
-				threads = params.threads,
 				container = helper_container,
 				region_bed = select_first([references.bed_panel]),
 				reference_bed = tb02_list_to_bed.bed,
@@ -171,7 +168,6 @@ workflow msi_detection {
 		# Sites fully inside a panel region (-f 1.0), one row per overlap.
 		call bedtools.intersect as tb04_panel_intersect {
 			input:
-				threads = params.threads,
 				a = tb02_list_to_bed.bed,
 				b = tb03_panel_chrom.bed,
 				output_name = list_stem + ".panel.intersect.tsv",
@@ -183,7 +179,6 @@ workflow msi_detection {
 
 		call name_correspondence as tb05_panel_correspondence {
 			input:
-				threads = params.threads,
 				container = helper_container,
 				intersection = tb04_panel_intersect.intersection,
 				output_name = list_stem + ".panel.bed",
@@ -192,7 +187,6 @@ workflow msi_detection {
 
 		call mark_list as tb06_mark_list {
 			input:
-				threads = params.threads,
 				container = helper_container,
 				msi_list = msi_list,
 				panel_correspondence_bed = tb05_panel_correspondence.bed,
@@ -213,7 +207,6 @@ workflow msi_detection {
 
 		call align_chrom_naming as tc01_roi_chrom {
 			input:
-				threads = params.threads,
 				container = helper_container,
 				region_bed = select_first([references.bed_roi]),
 				reference_bed = roi_source_bed,
@@ -221,7 +214,6 @@ workflow msi_detection {
 
 		call bedtools.intersect as tc02_roi_intersect {
 			input:
-				threads = params.threads,
 				a = roi_source_bed,
 				b = tc01_roi_chrom.bed,
 				output_name = roi_stem + ".intersect.tsv",
@@ -233,7 +225,6 @@ workflow msi_detection {
 
 		call name_correspondence as tc03_roi_correspondence {
 			input:
-				threads = params.threads,
 				container = helper_container,
 				intersection = tc02_roi_intersect.intersection,
 				output_name = roi_stem + ".bed",
@@ -265,7 +256,6 @@ workflow msi_detection {
 
 	call report as ta03_report {
 		input:
-			threads = params.threads,
 			container = helper_container,
 			run_id = run_id,
 			sample_names = sample_name,
@@ -280,7 +270,8 @@ workflow msi_detection {
 			min_reads = params.p_process.min_reads,
 			pval_cutoff = params.p_process.pval_cutoff,
 			sample_na_fraction = params.p_process.sample_na_fraction,
-			msi_helper = msi_post_helper,
+			consensus_roi_cutoff = params.p_process.consensus_roi_cutoff,
+			msi_helper = msi_main_helper,
 	}
 
 	output {
@@ -298,13 +289,12 @@ workflow msi_detection {
 	parameter_meta {
 		inputs: "run: run directory; every *.bam in it is processed (one sub-folder per library, e.g. alignments_libA/, with params.recursive = true). Its name is the run_id. samples (optional): only the BAMs whose name contains one of these IDs are processed (each ID must match a BAM)."
 		references: "genome: reference fasta the BAMs are aligned on, scanned by msisensor-pro scan; pro_list (optional): already generated scan list of genome, skips the scan; bed_panel (optional): panel BED (plain BED, no track line, e.g. *.amplicons.bed), analysis restricted to its microsatellites; bed_roi (optional): classic MSI markers (BAT26, NR21, ...), highlighted in the reports."
-		params: "threads: msisensor-pro pro -b (threads per BAM); coverage_threshold: msisensor-pro pro -c (msisensor-pro's own default: 15 WGS, 20 WXS); recursive: also look for BAMs in the run directory's sub-folders (one per library); p_process (reports only): min_reads, a site counts (% unstable, site status) only with >= this many reads, pval_cutoff, a site is unstable when its p-value is above this, and sample_na_fraction, sample status NA when more than this fraction of its loci are NA or MSU."
-		msisensorpro_container: "msisensor-pro image [default: apptainer-recipes/msisensor-pro-1.3.0.sif]; file:///...sif on slurm_apptainer."
-		bedtools_container: "bedtools image [default: apptainer-recipes/bedtools-2.31.1.sif]; file:///...sif on slurm_apptainer."
-		helper_container: "Generic python3 + awk image of the python/bash tasks [default: apptainer-recipes/python-3.12.sif]; the script is not in it."
+		params: "threads: msisensor-pro pro -b (threads per BAM); coverage_threshold: msisensor-pro pro -c (msisensor-pro's own default: 15 WGS, 20 WXS); recursive: also look for BAMs in the run directory's sub-folders (one per library); p_process (reports only): min_reads, a site counts (% unstable, site status) only with >= this many reads, pval_cutoff, a site is unstable when its p-value is above this, sample_na_fraction, sample status NA when more than this fraction of the loci listed on its sample page are NA or MSU, and consensus_roi_cutoff, sample status MSI when at least this many ROI markers are unstable in consensus."
+		msisensorpro_container: "msisensor-pro image [params/containers.json: apptainer-recipes/msisensor-pro-1.3.0.sif]; file:///...sif on slurm_apptainer."
+		bedtools_container: "bedtools image [params/containers.json: apptainer-recipes/bedtools-2.31.1.sif]; file:///...sif on slurm_apptainer."
+		helper_container: "Generic python3 + awk image of the python/bash tasks [params/containers.json: apptainer-recipes/python-3.12.sif]; the script is not in it."
 		exclude_prefixes: "BAMs whose name starts with one of these are not analysed (controls) [default: TN, TPH]."
-		msi_main_helper: "msi_detection_main_p.py, given to list_to_bed and mark_list as a File [default: scripts/msi_detection_main_p.py]."
-		msi_post_helper: "msi_detection_post_p.py, given to the report task as a File [default: scripts/msi_detection_post_p.py]."
+		msi_main_helper: "msi_detection_main_p.py, given to list_to_bed, mark_list and report as a File [params/containers.json: scripts/msi_detection_main_p.py]."
 	}
 }
 
@@ -603,6 +593,7 @@ task report {
 		Int min_reads
 		Float pval_cutoff
 		Float sample_na_fraction
+		Int consensus_roi_cutoff
 		File msi_helper
 		Int threads = 1
 
@@ -628,6 +619,7 @@ task report {
 			--min-reads ~{min_reads} \
 			--pval-cutoff ~{pval_cutoff} \
 			--sample-na-fraction ~{sample_na_fraction} \
+			--consensus-roi-cutoff ~{consensus_roi_cutoff} \
 			~{if defined(roi_correspondence_bed) then "--roi-bed \"" + select_first([roi_correspondence_bed]) + "\"" else ""}
 	>>>
 
@@ -652,8 +644,9 @@ task report {
 		genome: "Reference fasta path (only recorded in the reports)."
 		min_reads: "A site counts (% unstable, site status) only with >= this many reads."
 		pval_cutoff: "A site is unstable when its p-value is above this."
-		sample_na_fraction: "Sample status NA when more than this fraction of its loci are NA or MSU."
-		msi_helper: "msi_detection_post_p.py."
+		sample_na_fraction: "Sample status NA when more than this fraction of its loci listed on its sample page (a p-value in at least one library, or an ROI marker) are NA or MSU."
+		consensus_roi_cutoff: "Sample status MSI when at least this many ROI markers are unstable in consensus (else MSS)."
+		msi_helper: "Path to msi_detection_main_p.py."
 	}
 
 	requirements {

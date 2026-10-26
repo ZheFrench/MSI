@@ -2,21 +2,25 @@
 
 
 set -eu
-# cron's PATH is minimal: sprocket is in ~/.cargo/bin.
-#export PATH=/home/jp/.cargo/bin:$PATH
 
-WDL_DIR=/media/jp/SSD2/CHU/code/pipeline-jp/wdl
+WDL_DIR=/media/jp/SSD2/CHU/code/pipeline-jp
+SCRATCH_DIR=/media/jp/SSD2/CHU/code/pipeline-jp
+
+cd "$SCRATCH_DIR"
 
 WDL=$WDL_DIR/msi_detection-0.1.0.wdl
 SPROCKET_CONFIG=$WDL_DIR/backends.conf/sprocket.prod.toml
+# Images and python helpers (paths of this machine), before each run's params
+# JSON: the last file wins, so a params JSON can still override them.
+CONTAINERS=$WDL_DIR/params/containers.json
 TEMPLATE=$WDL_DIR/params/template.json
 
 VIZ=/media/jp/SSD2/CHU/test/viz
 WORK=/media/jp/SSD2/CHU/test/work
 RUNS_DIR=/media/jp/SSD2/CHU/input/fake-data/runs
-BAM_ROOT=/media/jp/SSD2/CHU/input/fake-data/fake_bam
-LOCKER_ADIVAR=/media/jp/SSD2/CHU/config/adivar-testNS.json
-LOCKER_MSI=/media/jp/SSD2/CHU/test/msi-sensor.txt
+BAMS_DIR=/media/jp/SSD2/CHU/input/fake-data/fake_bam
+LOCKER_ADIVAR=/media/jp/SSD2/CHU/config/locker/adivar-testNS.json
+LOCKER_MSI=/media/jp/SSD2/CHU/config/locker/msi-sensor.locker.txt
 
 mkdir -p "$VIZ" "$WORK"
 # Bound into the containers, so it must exist (pre_process appends to it).
@@ -58,11 +62,33 @@ index() {
 # launch (cron) never takes it again, nor is a failed run retried (remove its
 # line to rerun it). pre_process fails (see its ERROR lines above) when the run is
 # rejected or more than one run is left.
+# The run is first read from the lockers (job msi-pick_run, --print-run), then
+# its Experiment Name from its SampleSheet.csv (job msi-experiment,
+# --print-experiment), so that pre_process gets only that SampleSheet.csv and
+# that run's BAM folder, not the whole $RUNS_DIR and $BAMS_DIR.
+RUN_ID=$(python_slurm_job pick_run "$(ro "$LOCKER_ADIVAR"),$(ro "$LOCKER_MSI")" \
+	msi_detection_pre_p.py --print-run \
+	--locker-adivar "$LOCKER_ADIVAR" --locker-msi "$LOCKER_MSI") \
+	|| { echo "msi_detection_pre_p.py --print-run failed" >&2; exit 1; }
+# No run to analyse (logged why): stop here, not an error.
+[ -n "$RUN_ID" ] || exit 0
+SAMPLE_SHEET=$RUNS_DIR/$RUN_ID/SampleSheet.csv
+[ -f "$SAMPLE_SHEET" ] || { echo "$RUN_ID: no $SAMPLE_SHEET" >&2; exit 1; }
+
+# Fails (ERROR lines above) when its sample sheet is rejected: the run stays
+# out of the MSI locker, retried at the next launch.
+EXPERIMENT=$(python_slurm_job experiment "$(ro "$LOCKER_ADIVAR"),$(ro "$LOCKER_MSI"),$(ro "$SAMPLE_SHEET")" \
+	msi_detection_pre_p.py --print-experiment --runs-dir "$RUNS_DIR" \
+	--locker-adivar "$LOCKER_ADIVAR" --locker-msi "$LOCKER_MSI") \
+	|| { echo "msi_detection_pre_p.py --print-experiment failed" >&2; exit 1; }
+RUN_BAMS=$BAMS_DIR/$EXPERIMENT
+[ -d "$RUN_BAMS" ] || { echo "$RUN_ID: no $RUN_BAMS (Experiment Name of $SAMPLE_SHEET)" >&2; exit 1; }
+
 mkdir -p "$WORK/config"
-CONFIG=$(python_slurm_job pre_process "$(ro "$RUNS_DIR"),$(ro "$BAM_ROOT"),$(ro "$LOCKER_ADIVAR"),$LOCKER_MSI,$WORK/config" \
+CONFIG=$(python_slurm_job pre_process "$(ro "$SAMPLE_SHEET"),$(ro "$RUN_BAMS"),$(ro "$LOCKER_ADIVAR"),$LOCKER_MSI,$WORK/config" \
 	msi_detection_pre_p.py --runs-dir "$RUNS_DIR" \
 	--locker-adivar "$LOCKER_ADIVAR" --locker-msi "$LOCKER_MSI" \
-	--bam-root "$BAM_ROOT" --template "$TEMPLATE" --output-dir "$WORK/config") \
+	--bams-dir "$BAMS_DIR" --template "$TEMPLATE" --output-dir "$WORK/config") \
 	|| { echo "msi_detection_pre_p.py failed" >&2; exit 1; }
 # No run to analyse (pre_process logged why): stop here, not an error.
 [ -n "$CONFIG" ] || exit 0
@@ -71,5 +97,5 @@ CONFIG=$(python_slurm_job pre_process "$(ro "$RUNS_DIR"),$(ro "$BAM_ROOT"),$(ro 
 RUN=msi_detection/$(basename "$CONFIG" .json)
 echo "=== $CONFIG"
 # Its outputs JSON (stdout) stays out of the cron log: it is the run's outputs.json.
-sprocket run -v -s -c "$SPROCKET_CONFIG" -o "$WORK/sprocket" --index-on "$RUN" "$WDL" "@$CONFIG" >/dev/null
+sprocket run -v -s -c "$SPROCKET_CONFIG" -o "$WORK/sprocket" --index-on "$RUN" "$WDL" "@$CONTAINERS" "@$CONFIG" >/dev/null
 index "$RUN"
