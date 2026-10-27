@@ -69,7 +69,6 @@ Cron mode, e.g. every 4 hours on Thursdays and Fridays:
 - [Tasks](#tasks)
 - [Inputs](#inputs)
 - [Outputs](#outputs)
-- [Files](#files)
 - [Companion scripts](#companion-scripts)
 
 ## Before the first cron launch
@@ -415,28 +414,6 @@ $WORK/
 
 A call taken from the cache has no `attempts/`, only `inputs.json` and `outputs.json`: its results
 are in the run that computed them.
-
-## Files
-
-| File | Role |
-|---|---|
-| `msi_detection-0.1.0.wdl` | The workflow |
-| `module/msisensorpro-1.3.0.wdl`, `module/bedtools-2.31.1.wdl` | Tool modules (tasks `scan`, `pro`; `intersect`) |
-| `main-scripts/msi_detection_pre_p.py` | Before the workflow: params JSON of the runs left to analyse (run by `BASH.sprocket.cron.sh`) |
-| `main-scripts/msi_detection_main_p.py` | Reference list steps of the workflow (`msi_main_helper`) |
-| `main-scripts/msi_detection_report_p.py` | Report step of the workflow (`msi_report_helper`): this run's pages (page icon embedded) |
-| `main-scripts/msi_detection_post_p.py` | After the workflow: `index`, the all-runs dashboard (run by `BASH.sprocket.cron.sh` / `BASH.sprocket.batch.sh`) |
-| `apptainer-recipes/python-3.12.def` | Generic python3 + awk image of the python/bash tasks |
-| `params/install.json` | Images and python helpers of the workflow (passed to every `sprocket run`) |
-| `params/template.json` | Params JSON template (GRCh37, Juno v3 panel, ROI hg19): `pre_process` fills `run` per run |
-| `backends.conf/sprocket.prod.toml` | sprocket config: Slurm + Apptainer |
-| `backends.conf/slurm-local/` | Single-node Slurm of this workstation (`sudo ./install.sh`) |
-| `BASH.sprocket.cron.sh`, `companion-scripts/BASH.sprocket.batch.sh` | `sprocket run` with this folder's config: cron mode (run found by pre_process) / batch mode (folder of params JSON) |
-| `companion-scripts/make_configs.py`, `BASH.make_configs.sh` | Batch mode, before: `<run>_params.json` of the given runs of a BAM group folder (`failed-runs.txt`: runs without BAM); its Slurm/Apptainer launcher |
-| `companion-scripts/export_tsv.py`, `BASH.export_tsv.sh` | Batch mode, after: results of a reports folder as a TSV, one line per sample; its Slurm/Apptainer launcher |
-| `companion-scripts/make_msi_locker.py` | Cron mode, before the first launch: adds every run finished by ADIVAR to the MSI locker |
-| `BASH.doc.sh`, `apptainer-recipes/sprocket-doc-0.31.0.def` | HTML documentation (`docs/`, generated) and its image |
-| `diagram/msi_detection_metromap.drawio` / `.preview.png`, `diagram/BASH.render_png.sh` | Workflow diagram, its PNG export |
 
 ## Companion scripts
 

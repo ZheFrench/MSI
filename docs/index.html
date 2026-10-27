@@ -145,7 +145,6 @@ differs between the two lockers: with more, it stops with an error and analyses 
 <li><a href="#tasks" rel="noopener noreferrer">Tasks</a></li>
 <li><a href="#inputs" rel="noopener noreferrer">Inputs</a></li>
 <li><a href="#outputs" rel="noopener noreferrer">Outputs</a></li>
-<li><a href="#files" rel="noopener noreferrer">Files</a></li>
 <li><a href="#companion-scripts" rel="noopener noreferrer">Companion scripts</a></li>
 </ul>
 <h2>Before the first cron launch</h2>
@@ -423,26 +422,6 @@ the run that computed them, possibly in another <code>WORK</code>.</p>
 </code></pre>
 <p>A call taken from the cache has no <code>attempts/</code>, only <code>inputs.json</code> and <code>outputs.json</code>: its results
 are in the run that computed them.</p>
-<h2>Files</h2>
-<table><thead><tr><th>File</th><th>Role</th></tr></thead><tbody>
-<tr><td><code>msi_detection-0.1.0.wdl</code></td><td>The workflow</td></tr>
-<tr><td><code>module/msisensorpro-1.3.0.wdl</code>, <code>module/bedtools-2.31.1.wdl</code></td><td>Tool modules (tasks <code>scan</code>, <code>pro</code>; <code>intersect</code>)</td></tr>
-<tr><td><code>main-scripts/msi_detection_pre_p.py</code></td><td>Before the workflow: params JSON of the runs left to analyse (run by <code>BASH.sprocket.cron.sh</code>)</td></tr>
-<tr><td><code>main-scripts/msi_detection_main_p.py</code></td><td>Reference list steps of the workflow (<code>msi_main_helper</code>)</td></tr>
-<tr><td><code>main-scripts/msi_detection_report_p.py</code></td><td>Report step of the workflow (<code>msi_report_helper</code>): this run's pages (page icon embedded)</td></tr>
-<tr><td><code>main-scripts/msi_detection_post_p.py</code></td><td>After the workflow: <code>index</code>, the all-runs dashboard (run by <code>BASH.sprocket.cron.sh</code> / <code>BASH.sprocket.batch.sh</code>)</td></tr>
-<tr><td><code>apptainer-recipes/python-3.12.def</code></td><td>Generic python3 + awk image of the python/bash tasks</td></tr>
-<tr><td><code>params/install.json</code></td><td>Images and python helpers of the workflow (passed to every <code>sprocket run</code>)</td></tr>
-<tr><td><code>params/template.json</code></td><td>Params JSON template (GRCh37, Juno v3 panel, ROI hg19): <code>pre_process</code> fills <code>run</code> per run</td></tr>
-<tr><td><code>backends.conf/sprocket.prod.toml</code></td><td>sprocket config: Slurm + Apptainer</td></tr>
-<tr><td><code>backends.conf/slurm-local/</code></td><td>Single-node Slurm of this workstation (<code>sudo ./install.sh</code>)</td></tr>
-<tr><td><code>BASH.sprocket.cron.sh</code>, <code>companion-scripts/BASH.sprocket.batch.sh</code></td><td><code>sprocket run</code> with this folder's config: cron mode (run found by pre_process) / batch mode (folder of params JSON)</td></tr>
-<tr><td><code>companion-scripts/make_configs.py</code>, <code>BASH.make_configs.sh</code></td><td>Batch mode, before: <code>&lt;run&gt;_params.json</code> of the given runs of a BAM group folder (<code>failed-runs.txt</code>: runs without BAM); its Slurm/Apptainer launcher</td></tr>
-<tr><td><code>companion-scripts/export_tsv.py</code>, <code>BASH.export_tsv.sh</code></td><td>Batch mode, after: results of a reports folder as a TSV, one line per sample; its Slurm/Apptainer launcher</td></tr>
-<tr><td><code>companion-scripts/make_msi_locker.py</code></td><td>Cron mode, before the first launch: adds every run finished by ADIVAR to the MSI locker</td></tr>
-<tr><td><code>BASH.doc.sh</code>, <code>apptainer-recipes/sprocket-doc-0.31.0.def</code></td><td>HTML documentation (<code>docs/</code>, generated) and its image</td></tr>
-<tr><td><code>diagram/msi_detection_metromap.drawio</code> / <code>.preview.png</code>, <code>diagram/BASH.render_png.sh</code></td><td>Workflow diagram, its PNG export</td></tr>
-</tbody></table>
 <h2>Companion scripts</h2>
 <p>Helper scripts around the workflow, in <code>companion-scripts/</code>. The <code>BASH.*.sh</code> launchers run their
 python script as a Slurm job (<code>srun</code>) in <code>python-3.12.sif</code>; the python scripts only need the
