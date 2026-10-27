@@ -87,7 +87,7 @@ L=/path/to/locker
 
 - [`params/template.json`](params/template.json): references and thresholds of each run
 - [`params/install.json`](params/install.json): Apptainer images and Python scripts
-- [`backends.conf/sprocket.prod.toml`](backends.conf/sprocket.prod.toml): sprocket and Slurm settings
+- [`backends.conf/sprocket.cron.toml`](backends.conf/sprocket.cron.toml), [`backends.conf/sprocket.batch.toml`](backends.conf/sprocket.batch.toml): sprocket and Slurm settings of each mode (same settings, one call cache each)
 - [`BASH.sprocket.cron.sh`](BASH.sprocket.cron.sh): folders and lockers of the cron mode
 - finally, edit the crontab, to launch `BASH.sprocket.cron.sh` 
 
@@ -144,7 +144,7 @@ Then both scripts, for each params JSON:
 
 1. sets the destinations `VIZ` (reports folder) and `WORK` (sprocket's runs), created if needed:
    hardcoded in `BASH.sprocket.cron.sh`.
-2. runs `sprocket run -s -c $SPROCKET_CONFIG` (`backends.conf/sprocket.prod.toml`) in
+2. runs `sprocket run -s -c $SPROCKET_CONFIG` (`backends.conf/sprocket.cron.toml` / `sprocket.batch.toml`) in
    `$WORK/sprocket/runs/msi_detection/<timestamp>/`, one folder per task;
 3. runs `msi_detection_post_p.py index` as a Slurm job (`srun`, in `python-3.12.sif`): copies the run's
    `viz/runs/<run_id>/` into `$VIZ/runs/` and rebuilds the dashboard from every
@@ -212,7 +212,8 @@ Two main folders, `VIZ` and `WORK`:
 
 - `VIZ`: the HTML reports and the all-runs dashboard, the folder to open (described first below);
 - `WORK`: sprocket's runs, with every task's files and logs (tree at the end of this section).
-  The call cache is elsewhere, in `cache_dir` of `backends.conf/sprocket.prod.toml`.
+  The call cache is elsewhere, in `cache_dir` of `backends.conf/sprocket.cron.toml` (cron) or
+  `sprocket.batch.toml` (batch): one cache per mode.
 
 `ta03_report` returns `viz/` as a `Directory` output, in its folder of the sprocket run:
 
@@ -309,4 +310,9 @@ python script as a Slurm job (`srun`) in `python-3.12.sif`;
 ./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR VIZ WORK  # in screen / tmux
 ./companion-scripts/BASH.export_tsv.sh VIZ OUTPUT_DIR
 ```
+
+**Note:** `BASH.sprocket.batch.sh` runs sprocket with its own config,
+[`backends.conf/sprocket.batch.toml`](backends.conf/sprocket.batch.toml), not the cron's
+`sprocket.cron.toml`: same settings, but a different `cache_dir`, so that the batch and cron call
+caches stay apart (a batch never reuses a cron result, nor the reverse).
 

@@ -10,7 +10,7 @@ set -eu
 WDL_DIR=/media/jp/SSD2/CHU/code/pipeline-jp
 
 WDL=$WDL_DIR/msi_detection-0.1.0.wdl
-SPROCKET_CONFIG=$WDL_DIR/backends.conf/sprocket.prod.toml
+SPROCKET_CONFIG=$WDL_DIR/backends.conf/sprocket.batch.toml
 # Images and python helpers (paths of this machine), before each run's params
 # JSON: the last file wins, so a params JSON can still override them.
 INSTALL=$WDL_DIR/params/install.json

@@ -152,13 +152,13 @@ L=/path/to/locker
 </code></pre>
 <p><strong>Edit these files by hand at install:</strong></p>
 <ul>
-<li><code>params/template.json</code>: references and thresholds of each run</li>
-<li><code>params/install.json</code>: Apptainer images and Python scripts</li>
-<li><code>backends.conf/sprocket.prod.toml</code>: sprocket and Slurm settings</li>
-<li><code>BASH.sprocket.cron.sh</code>: folders and lockers of the cron mode</li>
+<li><a href="params/template.json" rel="noopener noreferrer"><code>params/template.json</code></a>: references and thresholds of each run</li>
+<li><a href="params/install.json" rel="noopener noreferrer"><code>params/install.json</code></a>: Apptainer images and Python scripts</li>
+<li><a href="backends.conf/sprocket.cron.toml" rel="noopener noreferrer"><code>backends.conf/sprocket.cron.toml</code></a>, <a href="backends.conf/sprocket.batch.toml" rel="noopener noreferrer"><code>backends.conf/sprocket.batch.toml</code></a>: sprocket and Slurm settings of each mode (same settings, one call cache each)</li>
+<li><a href="BASH.sprocket.cron.sh" rel="noopener noreferrer"><code>BASH.sprocket.cron.sh</code></a>: folders and lockers of the cron mode</li>
 <li>finally, edit the crontab, to launch <code>BASH.sprocket.cron.sh</code></li>
 </ul>
-<p><code>params/template.json</code>: (copied by <code>pre_process</code> for each run; <code>run</code> and <code>samples</code> stay empty, filled per run). Define a FASTA genome (<code>genome</code>), a BED of your panel (<code>bed_panel</code>) and a
+<p><code>params/template.json</code>: Define a FASTA genome (<code>genome</code>), a BED of your panel (<code>bed_panel</code>) and a
 BED of the ROI markers (<code>bed_roi</code>), the marker name in the 4th column (custom naming), e.g.
 <code>ROI.hg19.bed</code>:</p>
 <pre><code class="language-text">chr2	47641530	47641644	BAT26	0	+
@@ -169,10 +169,6 @@ chr11	125490736	125490816	NR22	0	+
 chr13	31722591	31722667	HT17	0	+
 chr14	23652317	23652397	NR21	0	+
 </code></pre>
-<p>Set the workflow's thresholds in the same file, under <code>msi_detection.params</code> (current values in
-<a href="params/template.json" rel="noopener noreferrer"><code>params/template.json</code></a>, each key described in <a href="#inputs" rel="noopener noreferrer">Inputs</a>).</p>
-<p><a href="params/install.json" rel="noopener noreferrer"><code>params/install.json</code></a>: paths of the Apptainer images and Python scripts the WDL workflow uses
-(details below).</p>
 <p><strong><code>BASH.sprocket.cron.sh</code></strong> (cron mode)</p>
 <table><thead><tr><th>Variable</th><th>Role</th></tr></thead><tbody>
 <tr><td><code>WDL_DIR</code></td><td>this folder</td></tr>
@@ -204,7 +200,7 @@ Then both scripts, for each params JSON:</p>
 <ol>
 <li>sets the destinations <code>VIZ</code> (reports folder) and <code>WORK</code> (sprocket's runs), created if needed:
 hardcoded in <code>BASH.sprocket.cron.sh</code>.</li>
-<li>runs <code>sprocket run -s -c $SPROCKET_CONFIG</code> (<code>backends.conf/sprocket.prod.toml</code>) in
+<li>runs <code>sprocket run -s -c $SPROCKET_CONFIG</code> (<code>backends.conf/sprocket.cron.toml</code> / <code>sprocket.batch.toml</code>) in
 <code>$WORK/sprocket/runs/msi_detection/&lt;timestamp&gt;/</code>, one folder per task;</li>
 <li>runs <code>msi_detection_post_p.py index</code> as a Slurm job (<code>srun</code>, in <code>python-3.12.sif</code>): copies the run's
 <code>viz/runs/&lt;run_id&gt;/</code> into <code>$VIZ/runs/</code> and rebuilds the dashboard from every
@@ -260,7 +256,8 @@ CPU and Memory are what each job reserves from Slurm (<code>requirements</code> 
 <ul>
 <li><code>VIZ</code>: the HTML reports and the all-runs dashboard, the folder to open (described first below);</li>
 <li><code>WORK</code>: sprocket's runs, with every task's files and logs (tree at the end of this section).
-The call cache is elsewhere, in <code>cache_dir</code> of <code>backends.conf/sprocket.prod.toml</code>.</li>
+The call cache is elsewhere, in <code>cache_dir</code> of <code>backends.conf/sprocket.cron.toml</code> (cron) or
+<code>sprocket.batch.toml</code> (batch): one cache per mode.</li>
 </ul>
 <p><code>ta03_report</code> returns <code>viz/</code> as a <code>Directory</code> output, in its folder of the sprocket run:</p>
 <pre><code class="language-text">$WORK/sprocket/runs/msi_detection/&lt;timestamp&gt;/calls/ta03_report/attempts/0/work/viz/
@@ -341,4 +338,8 @@ python script as a Slurm job (<code>srun</code>) in <code>python-3.12.sif</code>
 ./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR VIZ WORK  # in screen / tmux
 ./companion-scripts/BASH.export_tsv.sh VIZ OUTPUT_DIR
 </code></pre>
+<p><strong>Note:</strong> <code>BASH.sprocket.batch.sh</code> runs sprocket with its own config,
+<a href="backends.conf/sprocket.batch.toml" rel="noopener noreferrer"><code>backends.conf/sprocket.batch.toml</code></a>, not the cron's
+<code>sprocket.cron.toml</code>: same settings, but a different <code>cache_dir</code>, so that the batch and cron call
+caches stay apart (a batch never reuses a cron result, nor the reverse).</p>
 </div></div></div></div><div class="layout__main-rail"><div class="right-sidebar__container"><div class="right-sidebar__sticky"><div class="right-sidebar__header">ON THIS PAGE</div><nav id="page-sections" data-page-sections></nav><div class="right-sidebar__back-to-top-container"><a href="#title" x-on:click.prevent="(document.querySelector('.layout__main-center') || document.scrollingElement).scrollTo({ top: 0, behavior: 'smooth' })" class="right-sidebar__back-to-top"><span class="right-sidebar__back-to-top-icon">↑</span><span class="right-sidebar__back-to-top-text">Back to top</span></a></div></div></div></div></div></div></div></body></html>
