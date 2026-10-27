@@ -135,7 +135,6 @@ differs between the two lockers: with more, it stops with an error and analyses 
 <h2>Contents</h2>
 <ul>
 <li><a href="#introduction" rel="noopener noreferrer">Introduction</a></li>
-<li><a href="#before-the-first-cron-launch" rel="noopener noreferrer">Before the first cron launch</a></li>
 <li><a href="#configuration" rel="noopener noreferrer">Configuration</a></li>
 <li><a href="#the-cron-steps" rel="noopener noreferrer">The cron steps</a></li>
 <li><a href="#tasks" rel="noopener noreferrer">Tasks</a></li>
@@ -143,16 +142,15 @@ differs between the two lockers: with more, it stops with an error and analyses 
 <li><a href="#outputs" rel="noopener noreferrer">Outputs</a></li>
 <li><a href="#companion-scripts" rel="noopener noreferrer">Companion scripts</a></li>
 </ul>
-<h2>Before the first cron launch</h2>
-<p>So that the cron does not analyse every past run, fill the MSI locker
-with the runs ADIVAR has already finished.</p>
+<h2>Configuration</h2>
+<p><strong>Fill the MSI locker with the runs ADIVAR has already finished.</strong> The cron then only analyses the
+runs that are not in the MSI locker.</p>
 <pre><code class="language-sh"># same lockers as LOCKER_ADIVAR / LOCKER_MSI of BASH.sprocket.cron.sh
 L=/path/to/locker
 ./companion-scripts/make_msi_locker.py --locker-adivar $L/adivar-testNS.json --locker-msi $L/msi-sensor.locker.txt --dry-run   # prints the runs to add
 ./companion-scripts/make_msi_locker.py --locker-adivar $L/adivar-testNS.json --locker-msi $L/msi-sensor.locker.txt
 </code></pre>
-<h2>Configuration</h2>
-<p>Edit these files by hand at install:</p>
+<p><strong>Edit these files by hand at install:</strong></p>
 <ul>
 <li><code>params/template.json</code>: references and thresholds of each run</li>
 <li><code>params/install.json</code>: Apptainer images and Python scripts</li>
@@ -205,8 +203,7 @@ Experiment Name or a missing BAM folder stops the script before the run is locke
 Then both scripts, for each params JSON:</p>
 <ol>
 <li>sets the destinations <code>VIZ</code> (reports folder) and <code>WORK</code> (sprocket's runs), created if needed:
-hardcoded in <code>BASH.sprocket.cron.sh</code>, arguments of <code>BASH.sprocket.batch.sh</code>; never in the WDL
-nor in the params JSON;</li>
+hardcoded in <code>BASH.sprocket.cron.sh</code>.</li>
 <li>runs <code>sprocket run -s -c $SPROCKET_CONFIG</code> (<code>backends.conf/sprocket.prod.toml</code>) in
 <code>$WORK/sprocket/runs/msi_detection/&lt;timestamp&gt;/</code>, one folder per task;</li>
 <li>runs <code>msi_detection_post_p.py index</code> as a Slurm job (<code>srun</code>, in <code>python-3.12.sif</code>): copies the run's
@@ -219,44 +216,6 @@ changes with each run, so it is built after the run (<code>index</code>), not by
 current reports would not be reproducible nor cacheable). <code>index</code> can be re-run at any time, e.g.
 after deleting a run folder. Everything else stays in sprocket's run folder (paths in its
 <code>outputs.json</code>), every task keeping its <code>work/</code> folder (~300 MB per run).</p>
-<h3>Batch mode: params JSON and TSV export</h3>
-<p>The params JSON of a batch come from <code>companion-scripts/make_configs.py</code>: given a group folder of
-BAM folders (one per run: <code>input/colon-msi</code>, <code>input/foie-mss</code>...) and run names, on the command line
-and/or in a text file, it writes <code>&lt;run&gt;_params.json</code> (copy of <code>params/template.json</code>,
-<code>run</code> = <code>&lt;group folder&gt;/&lt;run&gt;</code>) in <code>--output-dir</code> (required: the launcher's <code>OUTPUT_DIR</code>). The
-group folder picks the run, the same run name being in several groups.</p>
-<p>The runs file has one line per run, or per run + sample ID to analyse only some samples
-(columns separated by tabs or spaces, <code>#</code> comments allowed):</p>
-<pre><code>Run154_Juno                  # every BAM of the run (but the controls)
-Run171_Juno  C22D03556T      # only these samples of Run171_Juno
-Run171_Juno  C22D03587T
-</code></pre>
-<p>The sample IDs of a run go to <code>"msi_detection.inputs".samples</code>: <code>ta01_find_bams</code> then only keeps the
-BAMs whose name contains one of them (every library). A run without BAM, or with a sample ID
-matching no BAM of the run (checked before the workflow), gets no params JSON: its lines are written
-in <code>&lt;output-dir&gt;/failed-runs.txt</code> (same format as the runs file, for a rerun; removed when no run
-fails) and the script exits 1, the other runs being written.</p>
-<p>After the batch, <code>companion-scripts/export_tsv.py</code> writes the results of its reports folder as a
-TSV, one line per sample: <code>results_msi_&lt;date&gt;.tsv</code> (date <code>YYYY-MM-DD_HH-MM-SS</code>: each export is a new file), in the launcher's <code>OUTPUT_DIR</code> (required), in the reports folder with the python script alone (<code>--output-dir</code>). It recomputes nothing: it reads
-the dashboard data (<code>index_msi_sample.js</code>, then each sample's <code>runs/&lt;run_id&gt;/&lt;sample&gt;_index_sample.js</code>),
-so the table matches the dashboard. Columns: <code>run_id</code>, <code>sample_name</code>, <code>call</code>, <code>consensus_roi</code>,
-<code>consensus_total</code>, <code>pct_region_unstable</code>; per library <code>&lt;lib&gt;_unstable_region_count</code>,
-<code>&lt;lib&gt;_unstable_roi_count</code>; per ROI marker <code>&lt;marker&gt;</code> (its site status, the same for every library),
-then <code>&lt;lib&gt;_&lt;marker&gt;_pro_p</code> and <code>&lt;lib&gt;_&lt;marker&gt;_cov</code> for each library (no mean). Empty cell: no value.</p>
-<p>Both run through a launcher, like the other python steps: a Slurm job (<code>srun</code>, jobs
-<code>msi-make_configs</code> / <code>msi-export_tsv</code>) in <code>python-3.12.sif</code> (<code>python3 -I</code>), mounting the code
-read-only, what the script reads (read-only) and the folder it writes:</p>
-<pre><code class="language-sh">S=/path/to/data
-./companion-scripts/BASH.make_configs.sh $S/input/foie-mss $S/config/runs-test.txt $S/config/config-test
-./companion-scripts/BASH.sprocket.batch.sh $S/config/config-test $S/output/config-test/viz $S/output/config-test/work
-./companion-scripts/BASH.export_tsv.sh $S/output/config-test/viz $S/output/config-test      # -&gt; $S/output/config-test/results_msi_&lt;date&gt;.tsv
-</code></pre>
-<p>The python scripts can also be run directly on the host (only the standard library):
-<code>make_configs.py BAMS_DIR [RUN ...] [--runs-file TXT] --output-dir DIR</code>,
-<code>export_tsv.py --viz VIZ_DIR [--output-dir DIR | --output TSV]</code>.</p>
-<p>Run by hand, with a params JSON written by <code>pre_process</code> (or a filled copy of <code>params/template.json</code>):</p>
-<pre><code class="language-sh">sprocket run -s -c backends.conf/sprocket.prod.toml msi_detection-0.1.0.wdl @params/install.json @$WORK/config/&lt;date&gt;-&lt;run&gt;-&lt;Experiment Name&gt;.json
-</code></pre>
 <h2>Tasks</h2>
 <p>Calls are named after their line on the diagram, <code>t&lt;line&gt;&lt;rank&gt;_&lt;step&gt;</code>: <code>ta</code> BAMs (green),
 <code>tb</code> msisensor-pro list (blue, panel steps included), <code>tc</code> ROI markers (red).
@@ -277,22 +236,9 @@ CPU and Memory are what each job reserves from Slurm (<code>requirements</code> 
 <tr><td><code>ta02_sensorpro_pro</code> × N (<code>sensorpro.pro</code>)</td><td>msisensor-pro</td><td>Scatter, one per BAM: <code>msisensor-pro pro -d &lt;analysis list&gt; -t &lt;bam&gt; -b threads -c coverage_threshold</code>. A failure on any BAM fails the workflow.</td><td><code>&lt;sample&gt;</code>, <code>_all</code>, <code>_dis</code>, <code>_unstable</code></td><td><code>params.threads</code> (8: <code>pro -b</code>)</td><td>4 GiB</td><td>CPU: params JSON; memory: <code>module/msisensorpro-1.3.0.wdl</code></td></tr>
 <tr><td><code>ta03_report</code> (<code>report</code>)</td><td>python image</td><td>Reads every BAM's <code>_all</code> (<code>File</code>s, nothing copied) and builds this run's reports in <code>viz/runs/&lt;run_id&gt;/</code> (run page, sample pages; the all-runs dashboard is built by <code>index</code> after the run); log on its stderr; writes nothing outside its task.</td><td><code>viz/</code> (<code>Directory</code>)</td><td>1</td><td>2 GiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
 </tbody></table>
-<p>The python steps of the workflow are subcommands of two self-contained scripts (a WDL task gets
-its script alone): <a href="main-scripts/msi_detection_main_p.py" rel="noopener noreferrer"><code>main-scripts/msi_detection_main_p.py</code></a>
-(<code>msi_main_helper</code>: <code>list-to-bed</code>, <code>mark-list</code>, the reference list) and
-<a href="main-scripts/msi_detection_report_p.py" rel="noopener noreferrer"><code>main-scripts/msi_detection_report_p.py</code></a> (<code>msi_report_helper</code>:
-<code>report</code>). They are kept apart because sprocket's call cache keys on each task's input files:
-editing the report must not invalidate the list steps, whose outputs are whole-genome lists
-(~100 MB each). <a href="main-scripts/msi_detection_post_p.py" rel="noopener noreferrer"><code>main-scripts/msi_detection_post_p.py</code></a> only holds
-<code>index</code>, run after the workflow by the BASH scripts; it imports the page code (CSS, <code>&lt;head&gt;</code>,
-<code>.js</code> writer) of <code>msi_detection_report_p.py</code>, next to it in <code>main-scripts/</code>.</p>
 <h2>Inputs</h2>
 <p>Keys of the params JSON, all prefixed <code>msi_detection.</code> (see <a href="params/template.json" rel="noopener noreferrer"><code>params/template.json</code></a>).
 <code>inputs</code>, <code>references</code> and <code>params</code> are objects (WDL structs);</p>
-<pre><code class="language-json">"msi_detection.inputs":     {"run": "...", "samples": ["E25D04852T", "..."]},
-"msi_detection.references": {"genome": "...", "bed_panel": "...", "bed_roi": "...", "pro_list": "..."},
-"msi_detection.params":     {"threads": 8, "coverage_threshold": 1, "recursive": true, "p_process": {"min_reads": 200, "pval_cutoff": 0.1, "sample_na_fraction": 0.5, "consensus_roi_cutoff": 3}},
-</code></pre>
 <table><thead><tr><th>Key</th><th>Required</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>inputs.run</code></td><td>yes</td><td>Run directory; its name is the <code>run_id</code></td></tr>
 <tr><td><code>inputs.samples</code></td><td>no</td><td>Sample IDs: only the BAMs whose name contains one of them are analysed (an ID with no BAM fails the run). Without it: every BAM but the controls</td></tr>

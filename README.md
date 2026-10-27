@@ -62,7 +62,6 @@ Cron mode, e.g. every 4 hours on Thursdays and Fridays:
 
 ## Contents
 - [Introduction](#introduction)
-- [Before the first cron launch](#before-the-first-cron-launch)
 - [Configuration](#configuration)
 - [The cron steps](#the-cron-steps)
 - [Tasks](#tasks)
@@ -70,10 +69,12 @@ Cron mode, e.g. every 4 hours on Thursdays and Fridays:
 - [Outputs](#outputs)
 - [Companion scripts](#companion-scripts)
 
-## Before the first cron launch
 
-So that the cron does not analyse every past run, fill the MSI locker
-with the runs ADIVAR has already finished.
+## Configuration
+
+
+**Fill the MSI locker with the runs ADIVAR has already finished.** The cron then only analyses the
+runs that are not in the MSI locker.
 
 ```sh
 # same lockers as LOCKER_ADIVAR / LOCKER_MSI of BASH.sprocket.cron.sh
@@ -82,9 +83,7 @@ L=/path/to/locker
 ./companion-scripts/make_msi_locker.py --locker-adivar $L/adivar-testNS.json --locker-msi $L/msi-sensor.locker.txt
 ```
 
-## Configuration
-
-Edit these files by hand at install:
+**Edit these files by hand at install:**
 
 - `params/template.json`: references and thresholds of each run
 - `params/install.json`: Apptainer images and Python scripts
@@ -188,27 +187,11 @@ CPU and Memory are what each job reserves from Slurm (`requirements` of the task
 | `ta02_sensorpro_pro` × N (`sensorpro.pro`) | msisensor-pro | Scatter, one per BAM: `msisensor-pro pro -d <analysis list> -t <bam> -b threads -c coverage_threshold`. A failure on any BAM fails the workflow. | `<sample>`, `_all`, `_dis`, `_unstable` | `params.threads` (8: `pro -b`) | 4 GiB | CPU: params JSON; memory: `module/msisensorpro-1.3.0.wdl` |
 | `ta03_report` (`report`) | python image | Reads every BAM's `_all` (`File`s, nothing copied) and builds this run's reports in `viz/runs/<run_id>/` (run page, sample pages; the all-runs dashboard is built by `index` after the run); log on its stderr; writes nothing outside its task. | `viz/` (`Directory`) | 1 | 2 GiB | `msi_detection-0.1.0.wdl` |
 
-The python steps of the workflow are subcommands of two self-contained scripts (a WDL task gets
-its script alone): [`main-scripts/msi_detection_main_p.py`](main-scripts/msi_detection_main_p.py)
-(`msi_main_helper`: `list-to-bed`, `mark-list`, the reference list) and
-[`main-scripts/msi_detection_report_p.py`](main-scripts/msi_detection_report_p.py) (`msi_report_helper`:
-`report`). They are kept apart because sprocket's call cache keys on each task's input files:
-editing the report must not invalidate the list steps, whose outputs are whole-genome lists
-(~100 MB each). [`main-scripts/msi_detection_post_p.py`](main-scripts/msi_detection_post_p.py) only holds
-`index`, run after the workflow by the BASH scripts; it imports the page code (CSS, `<head>`,
-`.js` writer) of `msi_detection_report_p.py`, next to it in `main-scripts/`.
 
 ## Inputs
 
 Keys of the params JSON, all prefixed `msi_detection.` (see [`params/template.json`](params/template.json)).
 `inputs`, `references` and `params` are objects (WDL structs); 
-
-```json
-"msi_detection.inputs":     {"run": "...", "samples": ["E25D04852T", "..."]},
-"msi_detection.references": {"genome": "...", "bed_panel": "...", "bed_roi": "...", "pro_list": "..."},
-"msi_detection.params":     {"threads": 8, "coverage_threshold": 1, "recursive": true, "p_process": {"min_reads": 200, "pval_cutoff": 0.1, "sample_na_fraction": 0.5, "consensus_roi_cutoff": 3}},
-```
-
 
 | Key | Required | Description |
 |---|---|---|
