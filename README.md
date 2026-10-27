@@ -310,7 +310,7 @@ start with a digit, hence the letter; sprocket's `calls/<call>/` folders group t
 | `tb06_mark_list` (`mark_list`) | python image | Only with `bed_panel`. Full list, same rows, `filter` = `PASS` for the panel sites, `NO` elsewhere: **the list analysed by msisensor-pro**. | `<list>.panel.list` |
 | `tc01_roi_chrom`, `tc02_roi_intersect`, `tc03_roi_correspondence` | python image / bedtools / python image | Only with `bed_roi`. Same three steps with the ROI markers, on the panel sites when there is a panel (genome-wide otherwise). Name ends with `#<marker>`. | `<list>.panel.roi.bed` |
 | `ta02_sensorpro_pro` × N (`sensorpro.pro`) | msisensor-pro | Scatter, one per BAM: `msisensor-pro pro -d <analysis list> -t <bam> -b threads -c coverage_threshold`. A failure on any BAM fails the workflow. | `<sample>`, `_all`, `_dis`, `_unstable` |
-| `ta03_report` (`report`) | python image | Gets every BAM's results as `File`s, copies them to `data/<run_id>/<library>/`, builds this run's reports in `viz/runs/<run_id>/` (run page, sample pages; the all-runs dashboard is built by `index` after the run) and writes the log; writes nothing outside its task. | `viz/`, `data/`, `log/` (`Directory`) |
+| `ta03_report` (`report`) | python image | Reads every BAM's `_all` (`File`s, nothing copied) and builds this run's reports in `viz/runs/<run_id>/` (run page, sample pages; the all-runs dashboard is built by `index` after the run); log on its stderr; writes nothing outside its task. | `viz/` (`Directory`) |
 
 The python steps of the workflow are subcommands of two self-contained scripts (a WDL task gets
 its script alone): [`main-scripts/msi_detection_main_p.py`](main-scripts/msi_detection_main_p.py)
@@ -384,7 +384,7 @@ The genome, panel and ROI must use the same build as the BAMs (e.g. GRCh37 + `RO
 
 ## Outputs
 
-Returned by `ta03_report` as `Directory` outputs, in its `work/` folder of the run directory;
+Returned by `ta03_report` as a `Directory` output (`viz/`), in its `work/` folder of the run directory;
 `index` then adds `runs/<run_id>/` to `$VIZ` and builds the dashboard there:
 
 ```text
@@ -395,9 +395,9 @@ Returned by `ta03_report` as `Directory` outputs, in its `work/` folder of the r
 ├── index_msi_sample.js             its data, rewritten by each index
 └── runs/
     ├── Run154_Juno/                one folder per run (<run_id>)
-    │   ├── Run154_Juno_index_run.html      one row per sample, one column group per library
+    │   ├── Run154_Juno_index_run.html     
     │   ├── Run154_Juno_index_run.js
-    │   ├── C22D02853_index_sample.html     one sample, pooled across its libraries
+    │   ├── C22D02853_index_sample.html    
     │   └── C22D02853_index_sample.js
     └── Run171_Juno/
         ├── Run171_Juno_index_run.html
@@ -408,14 +408,14 @@ Returned by `ta03_report` as `Directory` outputs, in its `work/` folder of the r
         └── C22D03587T_index_sample.js
 ```
 
-`data/` and `log/` are not copied to `$VIZ`: they stay in `ta03_report`'s folder of the sprocket run
-(path: `report_data` / `report_log` in `outputs.json`; links in
-`$WORK/sprocket/index/msi_detection/<params JSON name>/`, except when every call came from the cache:
-`outputs.json` then points to the run that computed them, possibly in another `OUT_DIR`):
+The raw msisensor-pro outputs are not copied: they stay in each `ta02_sensorpro_pro` folder of the
+sprocket run (`_all` and `_unstable` listed in `outputs.json`); the report's log is
+`calls/ta03_report/attempts/0/stderr`. When every call came from the cache, `outputs.json` points to
+the run that computed them, possibly in another `OUT_DIR`:
 
 ```
-<sprocket run>/calls/ta03_report/attempts/0/work/data/<run_id>/<library>/<sample>{,_all,_dis,_unstable}
-<sprocket run>/calls/ta03_report/attempts/0/work/log/<run_id>_MSI_<timestamp>.log
+<sprocket run>/calls/ta02_sensorpro_pro-<N>/attempts/0/work/<sample>{,_all,_dis,_unstable}
+<sprocket run>/calls/ta03_report/attempts/0/stderr
 ```
 
 sprocket's own run directory (with `BASH.sprocket.cron.sh`: `$WORK/sprocket/runs/msi_detection/<timestamp>/`, `_latest` → last run):
@@ -429,8 +429,7 @@ calls/<call>/attempts/0/{command,stdout,stderr,work/}   each call (ta01_find_bam
 
 Workflow outputs (`outputs.json`): `msi_reference_list`, `msi_analysis_list`,
 `panel_correspondence_bed`, `roi_correspondence_bed`, `msisensorpro_all`,
-`msisensorpro_unstable`, `report_viz`, `report_data`, `report_log`
-(Directory).
+`msisensorpro_unstable`, `report_viz` (Directory).
 
 ## Files
 

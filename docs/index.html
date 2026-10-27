@@ -86,17 +86,62 @@ window.pagefind = import(pagefindPath)</script><script defer src="index.js"></sc
                                         current: false,
                                         icon: 'assets/workflow.svg',
                                     }
-                                }" class="left-sidebar__row" x-bind:class="node.current ? 'bg-slate-600/50 is-scrolled-to' : 'hover:bg-slate-700/40'"><div class="left-sidebar__indent -1"></div><div class="left-sidebar__content-item-container crop-ellipsis"><img x-bind:src="node.icon" class="left-sidebar__icon light:hidden" alt="Workflow icon"><img x-bind:src="node.icon?.replace('.svg', '.light.svg')" class="left-sidebar__icon hidden light:block" alt="Workflow icon"><sprocket-tooltip content="<code>msi_detection</code>" class="crop-ellipsis" x-bind:class="node.current ? 'text-slate-50' : 'group-hover:text-slate-50'"><span><code>msi_detection</code></span></sprocket-tooltip></div></a></ul></li></ul></div></div></div><div class="md:hidden fixed inset-0 z-30 bg-black/50" x-cloak x-show="sidebarState !== 'hidden'" x-on:click="collapseSidebar()" aria-hidden="true"></div><div class="layout__main-center"><div class="layout__main-shell"><div class="layout__main-center-content layout__main-body"><div class="flex flex-col gap-5" x-show="$store.search.query !== ''" x-data><h2 class="text-base leading-6 font-medium" x-text="`${$store.search.results.length} results for '${$store.search.query}'`"></h2><ul class="flex flex-col gap-5"><template x-for="result in $store.search.results" :key="result.url"><li class="search-result"><div class="flex flex-row gap-2 items-center"><img class="size-6" x-bind:src="theme === 'dark' ? `assets/${result.meta.image_dark}` : `assets/${result.meta.image_light}`" x-bind:alt="result.meta.image_alt || result.meta.title"><a :href="result.url" class="text-2xl leading-8 text-slate-50 font-medium" x-text="result.meta.title"></a></div><p class="search-result-excerpt" x-html="result.excerpt"></p></li></template><div x-show="!$store.search.loading &amp;&amp; $store.search.results.length === 0"><li class="flex place-content-center"><img src="assets/search.svg" class="size-8 block light:hidden" alt="Search icon"><img src="assets/search.light.svg" class="size-8 hidden light:block" alt="Search icon"></li><li class="flex gap-1 place-content-center text-center break-words whitespace-normal text-sm text-slate-500"><span x-text="'No results found for'"></span><span x-text="`&quot;${$store.search.query}&quot;`" class="text-slate-50"></span></li></div></ul></div><div><div class="flex gap-1 mb-3 max-md:hidden" x-show="showCenterButtons"><button type="button" aria-label="Hide sidebar" x-on:click="collapseSidebar()" x-bind:aria-pressed="sidebarState === 'hidden'" x-bind:class="getSidebarButtonClass('hidden')"><img src="assets/sidebar-icon-hide.svg" alt="" class="block light:hidden"></img><img src="assets/sidebar-icon-hide.light.svg" alt="" class="hidden light:block"></img></button><button type="button" aria-label="Default sidebar width" x-on:click="restoreSidebar()" x-bind:aria-pressed="sidebarState === 'normal'" x-bind:class="getSidebarButtonClass('normal')"><img src="assets/sidebar-icon-default.svg" alt="" class="block light:hidden"></img><img src="assets/sidebar-icon-default.light.svg" alt="" class="hidden light:block"></img></button><button type="button" aria-label="Expand sidebar" x-on:click="expandSidebar()" x-bind:aria-pressed="sidebarState === 'xl'" x-bind:class="getSidebarButtonClass('xl')"><img src="assets/sidebar-icon-expand.svg" alt="" class="block light:hidden"></img><img src="assets/sidebar-icon-expand.light.svg" alt="" class="hidden light:block"></img></button></div></div><div x-show="$store.search.query === ''"><div class="main__section"><div class="markdown-body" data-pagefind-body meta-img-dark="home.svg" meta-img-light="home.light.svg" data-pagefind-meta="image_dark[meta-img-dark], image_light[meta-img-light]"><h1>msi_detection-0.1.0.wdl</h1>
-<p>Everything about the WDL workflow lives in this folder (<code>pipeline-jp/</code>).</p>
-<p>WDL workflow run with <a href="https://sprocket.bio" rel="noopener noreferrer">sprocket</a>. It runs MSIsensor-pro (tumor-only) on every BAM of a run directory,
-restricts the analysis to a sequencing panel and/or the classic MSI markers (BAT26, NR21, ...), and
-updates the HTML reports (all runs → one run → one sample).</p>
+                                }" class="left-sidebar__row" x-bind:class="node.current ? 'bg-slate-600/50 is-scrolled-to' : 'hover:bg-slate-700/40'"><div class="left-sidebar__indent -1"></div><div class="left-sidebar__content-item-container crop-ellipsis"><img x-bind:src="node.icon" class="left-sidebar__icon light:hidden" alt="Workflow icon"><img x-bind:src="node.icon?.replace('.svg', '.light.svg')" class="left-sidebar__icon hidden light:block" alt="Workflow icon"><sprocket-tooltip content="<code>msi_detection</code>" class="crop-ellipsis" x-bind:class="node.current ? 'text-slate-50' : 'group-hover:text-slate-50'"><span><code>msi_detection</code></span></sprocket-tooltip></div></a></ul></li></ul></div></div></div><div class="md:hidden fixed inset-0 z-30 bg-black/50" x-cloak x-show="sidebarState !== 'hidden'" x-on:click="collapseSidebar()" aria-hidden="true"></div><div class="layout__main-center"><div class="layout__main-shell"><div class="layout__main-center-content layout__main-body"><div class="flex flex-col gap-5" x-show="$store.search.query !== ''" x-data><h2 class="text-base leading-6 font-medium" x-text="`${$store.search.results.length} results for '${$store.search.query}'`"></h2><ul class="flex flex-col gap-5"><template x-for="result in $store.search.results" :key="result.url"><li class="search-result"><div class="flex flex-row gap-2 items-center"><img class="size-6" x-bind:src="theme === 'dark' ? `assets/${result.meta.image_dark}` : `assets/${result.meta.image_light}`" x-bind:alt="result.meta.image_alt || result.meta.title"><a :href="result.url" class="text-2xl leading-8 text-slate-50 font-medium" x-text="result.meta.title"></a></div><p class="search-result-excerpt" x-html="result.excerpt"></p></li></template><div x-show="!$store.search.loading &amp;&amp; $store.search.results.length === 0"><li class="flex place-content-center"><img src="assets/search.svg" class="size-8 block light:hidden" alt="Search icon"><img src="assets/search.light.svg" class="size-8 hidden light:block" alt="Search icon"></li><li class="flex gap-1 place-content-center text-center break-words whitespace-normal text-sm text-slate-500"><span x-text="'No results found for'"></span><span x-text="`&quot;${$store.search.query}&quot;`" class="text-slate-50"></span></li></div></ul></div><div><div class="flex gap-1 mb-3 max-md:hidden" x-show="showCenterButtons"><button type="button" aria-label="Hide sidebar" x-on:click="collapseSidebar()" x-bind:aria-pressed="sidebarState === 'hidden'" x-bind:class="getSidebarButtonClass('hidden')"><img src="assets/sidebar-icon-hide.svg" alt="" class="block light:hidden"></img><img src="assets/sidebar-icon-hide.light.svg" alt="" class="hidden light:block"></img></button><button type="button" aria-label="Default sidebar width" x-on:click="restoreSidebar()" x-bind:aria-pressed="sidebarState === 'normal'" x-bind:class="getSidebarButtonClass('normal')"><img src="assets/sidebar-icon-default.svg" alt="" class="block light:hidden"></img><img src="assets/sidebar-icon-default.light.svg" alt="" class="hidden light:block"></img></button><button type="button" aria-label="Expand sidebar" x-on:click="expandSidebar()" x-bind:aria-pressed="sidebarState === 'xl'" x-bind:class="getSidebarButtonClass('xl')"><img src="assets/sidebar-icon-expand.svg" alt="" class="block light:hidden"></img><img src="assets/sidebar-icon-expand.light.svg" alt="" class="hidden light:block"></img></button></div></div><div x-show="$store.search.query === ''"><div class="main__section"><div class="markdown-body" data-pagefind-body meta-img-dark="home.svg" meta-img-light="home.light.svg" data-pagefind-meta="image_dark[meta-img-dark], image_light[meta-img-light]"><h1>Microsatellite instability (MSI) detection</h1>
+<h2>Indroduction</h2>
+<p>WDL workflow, run with <a href="https://sprocket.bio" rel="noopener noreferrer">sprocket</a>, for microsatellite instability (MSI) detection.
+It uses two tool modules, MSIsensor-pro and bedtools, and three Apptainer images: one per tool plus
+a generic Python image for the other steps.</p>
+<p>It runs MSIsensor-pro (tumor-only) on every BAM of a run directory, once the upstream pipeline
+(ADIVAR) has finished that run. Controls are skipped: BAMs whose name starts with <code>TN</code> or <code>TPH</code>.</p>
+<p>Before that, <code>msisensor-pro scan</code> lists every microsatellite of the genome (once: the result is
+cached, or given as <code>pro_list</code>). bedtools then intersects this list with the panel BED, so that
+only the microsatellites inside the panel regions are analysed, and with the ROI BED, which names
+the classic MSI markers (BAT25, BAT26, NR21...) among them.</p>
+<p>In cron mode, the pipeline compares two lockers: ADIVAR's (JSON, <code>status</code> 3 = finished) and the MSI
+locker (text, one run per line = already analysed). A run finished by ADIVAR and not yet in the MSI
+locker is analysed, then added to it. Before the first launch, build the MSI locker from ADIVAR's
+(<code>companion-scripts/make_msi_locker.py</code>, see <a href="#configuration-to-set-at-install" rel="noopener noreferrer">Configuration</a>), so
+that past runs are not re-analysed. As a safeguard, the cron only launches when exactly one run
+differs between the two lockers: with more, it stops with an error and analyses nothing.</p>
+<p>For the picked run, the pipeline reads a single field of its <code>SampleSheet.csv</code>: the Experiment Name, which gives the BAM folder to analyse.</p>
+<table>
+<tbody><tr>
+<th>ADIVAR locker</th>
+<th>MSI locker (built from it)</th>
+</tr>
+<tr>
+<td><pre><code>
+{
+    "261001_XV501631_0734_ATESTR141": {
+        "status": 3,
+        "last-status": 3
+    },
+    "261002_XV501631_0542_ATESTR145": {
+        "status": 2,
+        "last-status": 2
+    }
+}
+</code></pre></td>
+<td><pre><code>
+261001_XV501631_0734_ATESTR141
+</code></pre>
+(ATESTR145, still running, is left out: the cron analyses it once ADIVAR finishes it.)</td>
+</tr>
+</tbody></table>
+<p>Cron mode, e.g. every 4 hours on Thursdays and Fridays:</p>
+<pre><code class="language-sh">0 */4 * * 4,5 /path/to/pipeline-jp/BASH.sprocket.cron.sh &gt;&gt; /path/to/BASH.sprocket.cron.log 2&gt;&amp;1
+</code></pre>
 <p><a href="diagram/msi_detection_metromap.preview.png" rel="noopener noreferrer"><img src="diagram/msi_detection_metromap.preview.png" alt="msi_detection metro map"></a></p>
-<p>(Full-size image: <a href="diagram/msi_detection_metromap.preview.png" rel="noopener noreferrer"><code>diagram/msi_detection_metromap.preview.png</code></a>; editable diagram: <a href="diagram/msi_detection_metromap.drawio" rel="noopener noreferrer"><code>diagram/msi_detection_metromap.drawio</code></a>; re-export the PNG with <a href="diagram/BASH.render_png.sh" rel="noopener noreferrer"><code>diagram/BASH.render_png.sh</code></a>.)</p>
 <h2>Contents</h2>
 <ul>
-<li><a href="#configuration-to-set-at-install" rel="noopener noreferrer">Configuration (to set at install)</a></li>
-<li><a href="#quick-start" rel="noopener noreferrer">Quick start</a></li>
+<li><a href="#Introduction" rel="noopener noreferrer">Introduction</a></li>
+<li><a href="#Before-the-first-cron-launch" rel="noopener noreferrer">Before the first cron launch</a></li>
+<li><a href="#configuration" rel="noopener noreferrer">Configuration</a></li>
+<li><a href="#quick-start" rel="noopener noreferrer">Quick start</a>
+<ul>
+<li><a href="#batch-mode-params-json-and-tsv-export" rel="noopener noreferrer">Batch mode: params JSON and TSV export</a></li>
+</ul>
+</li>
 <li><a href="#tasks" rel="noopener noreferrer">Tasks</a>
 <ul>
 <li><a href="#resources" rel="noopener noreferrer">Resources</a></li>
@@ -108,13 +153,51 @@ updates the HTML reports (all runs → one run → one sample).</p>
 <li><a href="#files" rel="noopener noreferrer">Files</a></li>
 <li><a href="#html-documentation" rel="noopener noreferrer">HTML documentation</a></li>
 </ul>
-<h2>Configuration (to set at install)</h2>
-<p>Nothing is read from the environment: every path and Slurm setting is hardcoded in the files below
-(values here: this workstation). Every path must be the same on all the Slurm nodes (shared file
-system): the containers mount them at the same path.</p>
+<h2>Before the first cron launch</h2>
+<p>In order the cron does not analyse every past run, fill the MSI locker
+with the runs ADIVAR has already finished.</p>
+<pre><code class="language-sh"># same lockers as LOCKER_ADIVAR / LOCKER_MSI of BASH.sprocket.cron.sh
+L=/media/jp/SSD2/CHU/config/locker
+./companion-scripts/make_msi_locker.py --locker-adivar $L/adivar-testNS.json --locker-msi $L/msi-sensor.locker.txt --dry-run   # prints the runs to add
+./companion-scripts/make_msi_locker.py --locker-adivar $L/adivar-testNS.json --locker-msi $L/msi-sensor.locker.txt
+</code></pre>
+<h2>Configuration</h2>
+<p>Edit these files by hand at install :</p>
+<ul>
+<li><code>params/template.json</code></li>
+<li><code>params/install.json</code></li>
+<li><code>backends.conf/sprocket.prod.toml</code> # conf sprocket / slurm</li>
+<li><code>BASH.sprocket.cron.sh</code></li>
+</ul>
+<p><code>params/template.json</code>: (copied by <code>pre_process</code> for each run; <code>run</code> and <code>samples</code> stay empty, filled per run). Define a FASTA genome (<code>genome</code>), a BED of your panel (<code>bed_panel</code>) and a
+BED of the ROI markers (<code>bed_roi</code>), the marker name in the 4th column (custom naming), e.g.
+<code>ROI.hg19.bed</code>:</p>
+<pre><code class="language-text">chr2	47641530	47641644	BAT26	0	+
+chr2	95849332	95849414	NR24	0	+
+chr4	55598161	55598266	BAT25	0	+
+chr11	102193479	102193564	NR27	0	+
+chr11	125490736	125490816	NR22	0	+
+chr13	31722591	31722667	HT17	0	+
+chr14	23652317	23652397	NR21	0	+
+</code></pre>
+<p>Set up the workflow's custom thresholds in the same file (<code>msi_detection.params</code>, each key described
+in <a href="#inputs" rel="noopener noreferrer">Inputs</a>):</p>
+<pre><code class="language-json">"msi_detection.params": {
+    "threads": 8,
+    "coverage_threshold": 0,
+    "recursive": true,
+    "p_process": {
+        "min_reads": 200,
+        "pval_cutoff": 0.1,
+        "sample_na_fraction": 0.5,
+        "consensus_roi_cutoff": 3
+    }
+}
+</code></pre>
+<p><code>params/install.json</code>: paths of the Apptainer images and Python scripts the WDL workflow uses
+(details below).</p>
 <p><strong><code>BASH.sprocket.cron.sh</code></strong> (cron mode)</p>
 <table><thead><tr><th>Variable / line</th><th>Value</th><th>Role</th></tr></thead><tbody>
-<tr><td><code>PATH</code> (line 6, commented)</td><td><code>/home/jp/.cargo/bin:$PATH</code></td><td>cron's PATH is minimal: uncomment it if <code>sprocket</code> is not found</td></tr>
 <tr><td><code>WDL_DIR</code></td><td><code>/media/jp/SSD2/CHU/code/pipeline-jp</code></td><td>this folder</td></tr>
 <tr><td><code>VIZ</code></td><td><code>/media/jp/SSD2/CHU/test/viz</code></td><td>reports and dashboard (written by <code>index</code>)</td></tr>
 <tr><td><code>WORK</code></td><td><code>/media/jp/SSD2/CHU/test/work</code></td><td>sprocket's runs (<code>sprocket/</code>) and the params JSON (<code>config/</code>)</td></tr>
@@ -140,15 +223,16 @@ system): the containers mount them at the same path.</p>
 <tr><td><code>msi_detection.references.bed_roi</code></td><td><code>/media/jp/SSD2/CHU/refData/MSI/static/ROI.hg19.bed</code></td></tr>
 <tr><td><code>msi_detection.params</code></td><td><code>threads</code> (8, CPUs of each <code>msisensor-pro pro</code> only), <code>coverage_threshold</code>, <code>p_process</code> thresholds</td></tr>
 </tbody></table>
-<p><strong><code>params/containers.json</code></strong>: the workflow's images and python helpers, the only place they are
-set (absolute paths; images as <code>file://</code> + path). These five WDL inputs have no default: both
-scripts pass this file before each run's params JSON (<code>sprocket run ... @containers.json @&lt;params&gt;.json</code>;
+<p><strong><code>params/install.json</code></strong>: what depends on the installation, not on the run: the workflow's
+images and python helpers (scripts given to the tasks as <code>File</code>, not built into the image), the
+only place they are set (absolute paths; images as <code>file://</code> + path). These five WDL inputs have no default: both
+scripts pass this file before each run's params JSON (<code>sprocket run ... @install.json @&lt;params&gt;.json</code>;
 for a key in both, the last file wins, so a params JSON can still override an image for its run).
 Forgetting it stops sprocket before anything runs (<code>missing required input</code>).</p>
 <table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody>
 <tr><td><code>msi_detection.msisensorpro_container</code></td><td><code>file:///media/jp/SSD2/CHU/code/pipeline-jp/apptainer-recipes/msisensor-pro-1.3.0.sif</code></td></tr>
 <tr><td><code>msi_detection.bedtools_container</code></td><td><code>file:///media/jp/SSD2/CHU/code/pipeline-jp/apptainer-recipes/bedtools-2.31.1.sif</code></td></tr>
-<tr><td><code>msi_detection.helper_container</code></td><td><code>file:///media/jp/SSD2/CHU/code/pipeline-jp/apptainer-recipes/python-3.12.sif</code></td></tr>
+<tr><td><code>msi_detection.python_container</code></td><td><code>file:///media/jp/SSD2/CHU/code/pipeline-jp/apptainer-recipes/python-3.12.sif</code></td></tr>
 <tr><td><code>msi_detection.msi_main_helper</code></td><td><code>/media/jp/SSD2/CHU/code/pipeline-jp/main-scripts/msi_detection_main_p.py</code></td></tr>
 <tr><td><code>msi_detection.msi_report_helper</code></td><td><code>/media/jp/SSD2/CHU/code/pipeline-jp/main-scripts/msi_detection_report_p.py</code></td></tr>
 </tbody></table>
@@ -170,14 +254,14 @@ mounting only what that step reads:</p>
 <ol>
 <li><code>--print-run</code> (job <code>msi-pick_run</code>; the two lockers): prints the run finished by ADIVAR and not yet
 in the MSI locker;</li>
-<li><code>--print-experiment</code> (job <code>msi-experiment</code>; + that run's <code>$RUNS_DIR/&lt;run&gt;/SampleSheet.csv</code>): checks
-its <code>[Header]</code> and prints its Experiment Name, the name of its BAM folder;</li>
+<li><code>--print-experiment</code> (job <code>msi-experiment</code>; + that run's <code>$RUNS_DIR/&lt;run&gt;/SampleSheet.csv</code>): prints
+the Experiment Name of its <code>[Header]</code>, the name of its BAM folder;</li>
 <li>without option (job <code>msi-pre_process</code>; + that run's <code>$BAMS_DIR/&lt;Experiment Name&gt;/</code>, the MSI
 locker and <code>$WORK/config/</code> writable): writes its params JSON in <code>$WORK/config/</code> and adds the run
 to the locker.</li>
 </ol>
-<p>Neither the whole <code>$RUNS_DIR</code> nor the whole <code>$BAMS_DIR</code> is mounted. A rejected sample sheet or a
-missing BAM folder stops the script before the run is locked (retried at the next launch).
+<p>Neither the whole <code>$RUNS_DIR</code> nor the whole <code>$BAMS_DIR</code> is mounted. A sample sheet without
+Experiment Name or a missing BAM folder stops the script before the run is locked (retried at the next launch).
 Then both scripts, for each params JSON:</p>
 <ol>
 <li>sets the destinations, hardcoded in the script (not in the params): <code>VIZ</code> (reports folder) and
@@ -230,31 +314,31 @@ read-only, what the script reads (read-only) and the folder it writes:</p>
 <code>make_configs.py BAMS_DIR [RUN ...] [--runs-file TXT] --output-dir DIR</code>,
 <code>export_tsv.py --viz VIZ_DIR [--output-dir DIR | --output TSV]</code>.</p>
 <p>Run by hand, with a params JSON written by <code>pre_process</code> (or a filled copy of <code>params/template.json</code>):</p>
-<pre><code class="language-sh">sprocket run -s -c backends.conf/sprocket.prod.toml msi_detection-0.1.0.wdl @params/containers.json @$WORK/config/&lt;date&gt;-&lt;run&gt;-&lt;Experiment Name&gt;.json
+<pre><code class="language-sh">sprocket run -s -c backends.conf/sprocket.prod.toml msi_detection-0.1.0.wdl @params/install.json @$WORK/config/&lt;date&gt;-&lt;run&gt;-&lt;Experiment Name&gt;.json
 </code></pre>
 <h2>Tasks</h2>
 <p>In execution order. Tools are wrapped in <strong>modules</strong>, imported by the workflow:</p>
-<pre><code class="language-wdl">import "module/msisensorpro-1.3.0.wdl" as msisensorpro   # tasks scan, pro
+<pre><code class="language-wdl">import "module/msisensorpro-1.3.0.wdl" as sensorpro   # tasks scan, pro
 import "module/bedtools-2.31.1.wdl" as bedtools           # task intersect
 </code></pre>
 <p>Module tasks are generic (the tool's own options only), declare their image in
 <code>requirements.container</code> and can be reused by other workflows; the pipeline-specific steps are
-tasks of <code>msi_detection-0.1.0.wdl</code>, in a generic python3 + awk image (<code>helper_container</code>,
+tasks of <code>msi_detection-0.1.0.wdl</code>, in a generic python3 + awk image (<code>python_container</code>,
 <code>apptainer-recipes/python-3.12.sif</code>); the python script is given to them as a <code>File</code>, not built into the image.</p>
 <p>Calls are named after their line on the diagram, <code>t&lt;line&gt;&lt;rank&gt;_&lt;step&gt;</code>: <code>ta</code> BAMs (green),
 <code>tb</code> msisensor-pro list (blue, panel steps included), <code>tc</code> ROI markers (red). A WDL name can't
 start with a digit, hence the letter; sprocket's <code>calls/&lt;call&gt;/</code> folders group the same way.</p>
 <table><thead><tr><th>Call (task)</th><th>Runs</th><th>What it does</th><th>Main output</th></tr></thead><tbody>
 <tr><td><code>ta01_find_bams</code> (<code>find_bams</code>)</td><td>python image, bash</td><td>Lists every <code>*.bam</code> of the run directory (<code>inputs.run</code>) (sub-folders with <code>params.recursive</code>), with its index (<code>.bam.bai</code> or <code>.bai</code>), its library (folder relative to <code>input_dir</code>, <code>.</code> if none) and its sample name (BAM basename). <code>inputs.run</code> is a <code>Directory</code> (mounted by the engine); paths are returned relative to it. With <code>inputs.samples</code>, keeps only the BAMs whose name contains one of these IDs (every library). Fails if a BAM has no index, no BAM is found, or a sample ID matches no BAM.</td><td><code>bams</code>: one row per BAM</td></tr>
-<tr><td><code>tb01_sensorpro_scan</code> (<code>msisensorpro.scan</code>)</td><td>msisensor-pro</td><td><code>msisensor-pro scan</code> of the genome: every microsatellite site. Skipped when <code>references.pro_list</code> is given. Not redone from one run to the next: sprocket's call cache (<code>[run.task] cache = "on"</code>) reuses the previous scan (same genome and image), as long as that run's folder is kept.</td><td><code>&lt;genome&gt;.msisensor_pro.list</code></td></tr>
+<tr><td><code>tb01_sensorpro_scan</code> (<code>sensorpro.scan</code>)</td><td>msisensor-pro</td><td><code>msisensor-pro scan</code> of the genome: every microsatellite site. Skipped when <code>references.pro_list</code> is given. Not redone from one run to the next: sprocket's call cache (<code>[run.task] cache = "on"</code>) reuses the previous scan (same genome and image), as long as that run's folder is kept.</td><td><code>&lt;genome&gt;.msisensor_pro.list</code></td></tr>
 <tr><td><code>tb02_list_to_bed</code> (<code>list_to_bed</code>)</td><td>python image</td><td>Converts the list to BED6 (start = location − 1, end = start + unit length × repeat times).</td><td><code>&lt;list&gt;.bed</code></td></tr>
 <tr><td><code>tb03_panel_chrom</code> (<code>align_chrom_naming</code>)</td><td>python image, awk</td><td>Only with <code>bed_panel</code>. Copy of the panel BED with its chromosome names (<code>chr1</code> / <code>1</code>) aligned on the list's: bedtools matches them literally.</td><td><code>&lt;panel&gt;.chrnorm.bed</code></td></tr>
 <tr><td><code>tb04_panel_intersect</code> (<code>bedtools.intersect</code>)</td><td>bedtools</td><td><code>bedtools intersect -wa -wb -f 1.0</code>: the sites fully inside a panel region, one row per overlap.</td><td><code>&lt;list&gt;.panel.intersect.tsv</code></td></tr>
 <tr><td><code>tb05_panel_correspondence</code> (<code>name_correspondence</code>)</td><td>python image, awk</td><td>Turns the intersection into a BED6 named <code>&lt;site&gt;#&lt;probe&gt;#&lt;chrom:start-end&gt;</code>.</td><td><code>&lt;list&gt;.panel.bed</code></td></tr>
 <tr><td><code>tb06_mark_list</code> (<code>mark_list</code>)</td><td>python image</td><td>Only with <code>bed_panel</code>. Full list, same rows, <code>filter</code> = <code>PASS</code> for the panel sites, <code>NO</code> elsewhere: <strong>the list analysed by msisensor-pro</strong>.</td><td><code>&lt;list&gt;.panel.list</code></td></tr>
 <tr><td><code>tc01_roi_chrom</code>, <code>tc02_roi_intersect</code>, <code>tc03_roi_correspondence</code></td><td>python image / bedtools / python image</td><td>Only with <code>bed_roi</code>. Same three steps with the ROI markers, on the panel sites when there is a panel (genome-wide otherwise). Name ends with <code>#&lt;marker&gt;</code>.</td><td><code>&lt;list&gt;.panel.roi.bed</code></td></tr>
-<tr><td><code>ta02_sensorpro_pro</code> × N (<code>msisensorpro.pro</code>)</td><td>msisensor-pro</td><td>Scatter, one per BAM: <code>msisensor-pro pro -d &lt;analysis list&gt; -t &lt;bam&gt; -b threads -c coverage_threshold</code>. A failure on any BAM fails the workflow.</td><td><code>&lt;sample&gt;</code>, <code>_all</code>, <code>_dis</code>, <code>_unstable</code></td></tr>
-<tr><td><code>ta03_report</code> (<code>report</code>)</td><td>python image</td><td>Gets every BAM's results as <code>File</code>s, copies them to <code>data/&lt;run_id&gt;/&lt;library&gt;/</code>, builds this run's reports in <code>viz/runs/&lt;run_id&gt;/</code> (run page, sample pages; the all-runs dashboard is built by <code>index</code> after the run) and writes the log; writes nothing outside its task.</td><td><code>viz/</code>, <code>data/</code>, <code>log/</code> (<code>Directory</code>)</td></tr>
+<tr><td><code>ta02_sensorpro_pro</code> × N (<code>sensorpro.pro</code>)</td><td>msisensor-pro</td><td>Scatter, one per BAM: <code>msisensor-pro pro -d &lt;analysis list&gt; -t &lt;bam&gt; -b threads -c coverage_threshold</code>. A failure on any BAM fails the workflow.</td><td><code>&lt;sample&gt;</code>, <code>_all</code>, <code>_dis</code>, <code>_unstable</code></td></tr>
+<tr><td><code>ta03_report</code> (<code>report</code>)</td><td>python image</td><td>Reads every BAM's <code>_all</code> (<code>File</code>s, nothing copied) and builds this run's reports in <code>viz/runs/&lt;run_id&gt;/</code> (run page, sample pages; the all-runs dashboard is built by <code>index</code> after the run); log on its stderr; writes nothing outside its task.</td><td><code>viz/</code> (<code>Directory</code>)</td></tr>
 </tbody></table>
 <p>The python steps of the workflow are subcommands of two self-contained scripts (a WDL task gets
 its script alone): <a href="main-scripts/msi_detection_main_p.py" rel="noopener noreferrer"><code>main-scripts/msi_detection_main_p.py</code></a>
@@ -272,13 +356,13 @@ to <code>sbatch</code>). Only <code>ta02_sensorpro_pro</code> takes <code>params
 <table><thead><tr><th>Job</th><th>Task / script</th><th>CPU</th><th>Memory</th><th>Set in</th></tr></thead><tbody>
 <tr><td><code>msi-pick_run</code>, <code>msi-experiment</code>, <code>msi-pre_process</code> (cron only)</td><td><code>msi_detection_pre_p.py</code></td><td>1</td><td>1 GiB</td><td><code>srun</code> line of <code>BASH.sprocket.cron.sh</code></td></tr>
 <tr><td><code>ta01_find_bams</code></td><td><code>find_bams</code></td><td>1</td><td>512 MiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
-<tr><td><code>tb01_sensorpro_scan</code></td><td><code>msisensorpro.scan</code></td><td>1</td><td>4 GiB</td><td><code>module/msisensorpro-1.3.0.wdl</code></td></tr>
+<tr><td><code>tb01_sensorpro_scan</code></td><td><code>sensorpro.scan</code></td><td>1</td><td>4 GiB</td><td><code>module/msisensorpro-1.3.0.wdl</code></td></tr>
 <tr><td><code>tb02_list_to_bed</code></td><td><code>list_to_bed</code></td><td>1</td><td>2 GiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
 <tr><td><code>tb03_panel_chrom</code>, <code>tc01_roi_chrom</code></td><td><code>align_chrom_naming</code></td><td>1</td><td>512 MiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
 <tr><td><code>tb04_panel_intersect</code>, <code>tc02_roi_intersect</code></td><td><code>bedtools.intersect</code></td><td>1</td><td>2 GiB</td><td><code>module/bedtools-2.31.1.wdl</code></td></tr>
 <tr><td><code>tb05_panel_correspondence</code>, <code>tc03_roi_correspondence</code></td><td><code>name_correspondence</code></td><td>1</td><td>512 MiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
 <tr><td><code>tb06_mark_list</code></td><td><code>mark_list</code></td><td>1</td><td>2 GiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
-<tr><td><code>ta02_sensorpro_pro</code> × N (one per BAM)</td><td><code>msisensorpro.pro</code></td><td><code>params.threads</code> (8: <code>pro -b</code>)</td><td>4 GiB</td><td>CPU: params JSON; memory: <code>module/msisensorpro-1.3.0.wdl</code></td></tr>
+<tr><td><code>ta02_sensorpro_pro</code> × N (one per BAM)</td><td><code>sensorpro.pro</code></td><td><code>params.threads</code> (8: <code>pro -b</code>)</td><td>4 GiB</td><td>CPU: params JSON; memory: <code>module/msisensorpro-1.3.0.wdl</code></td></tr>
 <tr><td><code>ta03_report</code></td><td><code>report</code></td><td>1</td><td>2 GiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
 <tr><td><code>msi-index</code></td><td><code>msi_detection_post_p.py index</code></td><td>1</td><td>1 GiB</td><td><code>srun</code> line of <code>BASH.sprocket.cron.sh</code> / <code>BASH.sprocket.batch.sh</code></td></tr>
 <tr><td><code>msi-make_configs</code>, <code>msi-export_tsv</code> (batch only, run by hand)</td><td><code>make_configs.py</code>, <code>export_tsv.py</code></td><td>1</td><td>1 GiB</td><td><code>srun</code> line of <code>BASH.make_configs.sh</code> / <code>BASH.export_tsv.sh</code></td></tr>
@@ -308,21 +392,40 @@ params key (see <code>BASH.sprocket.cron.sh</code>):</p>
 <tr><td></td><td><code>p_process.pval_cutoff</code></td><td>yes</td><td>Reports: a site is unstable when its p-value is above this (e.g. 0.1)</td></tr>
 <tr><td></td><td><code>p_process.sample_na_fraction</code></td><td>yes</td><td>Reports: sample status NA when more than this fraction of the loci listed on its sample page are NA or MSU (e.g. 0.5): ROI markers, and sites with a p-value in at least one library (loci without any, e.g. 0 reads everywhere, are left out)</td></tr>
 <tr><td></td><td><code>p_process.consensus_roi_cutoff</code></td><td>yes</td><td>Reports: sample status MSI when at least this many ROI markers are unstable in consensus, MSS otherwise (e.g. 3)</td></tr>
-<tr><td><code>msisensorpro_container</code>, <code>bedtools_container</code></td><td></td><td>yes (<code>params/containers.json</code>)</td><td>Image of each tool (see below)</td></tr>
-<tr><td><code>helper_container</code></td><td></td><td>yes (<code>params/containers.json</code>)</td><td>Generic python3 + awk image of the python/bash tasks</td></tr>
-<tr><td><code>msi_main_helper</code></td><td></td><td>yes (<code>params/containers.json</code>)</td><td>Python reference list steps, a <code>File</code></td></tr>
-<tr><td><code>msi_report_helper</code></td><td></td><td>yes (<code>params/containers.json</code>)</td><td>Python report step, a <code>File</code></td></tr>
+<tr><td><code>msisensorpro_container</code>, <code>bedtools_container</code></td><td></td><td>yes (<code>params/install.json</code>)</td><td>Image of each tool (see below)</td></tr>
+<tr><td><code>python_container</code></td><td></td><td>yes (<code>params/install.json</code>)</td><td>Generic python3 + awk image of the python/bash tasks</td></tr>
+<tr><td><code>msi_main_helper</code></td><td></td><td>yes (<code>params/install.json</code>)</td><td>Python reference list steps, a <code>File</code></td></tr>
+<tr><td><code>msi_report_helper</code></td><td></td><td>yes (<code>params/install.json</code>)</td><td>Python report step, a <code>File</code></td></tr>
 </tbody></table>
 <p>The genome, panel and ROI must use the same build as the BAMs (e.g. GRCh37 + <code>ROI.hg19.bed</code>).</p>
 <h2>Outputs</h2>
-<p>Returned by <code>ta03_report</code> as <code>Directory</code> outputs, in its <code>work/</code> folder of the run directory;
+<p>Returned by <code>ta03_report</code> as a <code>Directory</code> output (<code>viz/</code>), in its <code>work/</code> folder of the run directory;
 <code>index</code> then adds <code>runs/&lt;run_id&gt;/</code> to <code>$VIZ</code> and builds the dashboard there:</p>
-<pre><code>&lt;VIZ&gt;/index_msi_run.html                       all runs (written once, reads index_msi_run.js)
-&lt;VIZ&gt;/index_msi_sample.html                    all samples of all runs (written once, reads index_msi_sample.js)
-&lt;VIZ&gt;/runs/&lt;run_id&gt;/&lt;run_id&gt;_index_run.html     one row per sample, one column group per library
-&lt;VIZ&gt;/runs/&lt;run_id&gt;/&lt;sample&gt;_index_sample.html  one sample, pooled across its libraries
-data/&lt;run_id&gt;/&lt;library&gt;/&lt;sample&gt;{,_all,_dis,_unstable}
-log/&lt;run_id&gt;_MSI_&lt;timestamp&gt;.log
+<pre><code class="language-text">&lt;VIZ&gt;/
+├── index_msi_run.html              all runs (written once)
+├── index_msi_run.js                its data, rewritten by each index
+├── index_msi_sample.html           all samples of all runs (written once)
+├── index_msi_sample.js             its data, rewritten by each index
+└── runs/
+    ├── Run154_Juno/                one folder per run (&lt;run_id&gt;)
+    │   ├── Run154_Juno_index_run.html     
+    │   ├── Run154_Juno_index_run.js
+    │   ├── C22D02853_index_sample.html    
+    │   └── C22D02853_index_sample.js
+    └── Run171_Juno/
+        ├── Run171_Juno_index_run.html
+        ├── Run171_Juno_index_run.js
+        ├── C22D03556T_index_sample.html
+        ├── C22D03556T_index_sample.js
+        ├── C22D03587T_index_sample.html
+        └── C22D03587T_index_sample.js
+</code></pre>
+<p>The raw msisensor-pro outputs are not copied: they stay in each <code>ta02_sensorpro_pro</code> folder of the
+sprocket run (<code>_all</code> and <code>_unstable</code> listed in <code>outputs.json</code>); the report's log is
+<code>calls/ta03_report/attempts/0/stderr</code>. When every call came from the cache, <code>outputs.json</code> points to
+the run that computed them, possibly in another <code>OUT_DIR</code>:</p>
+<pre><code>&lt;sprocket run&gt;/calls/ta02_sensorpro_pro-&lt;N&gt;/attempts/0/work/&lt;sample&gt;{,_all,_dis,_unstable}
+&lt;sprocket run&gt;/calls/ta03_report/attempts/0/stderr
 </code></pre>
 <p>sprocket's own run directory (with <code>BASH.sprocket.cron.sh</code>: <code>$WORK/sprocket/runs/msi_detection/&lt;timestamp&gt;/</code>, <code>_latest</code> → last run):</p>
 <pre><code>output.log        sprocket's log
@@ -332,31 +435,7 @@ calls/&lt;call&gt;/attempts/0/{command,stdout,stderr,work/}   each call (ta01_fi
 </code></pre>
 <p>Workflow outputs (<code>outputs.json</code>): <code>msi_reference_list</code>, <code>msi_analysis_list</code>,
 <code>panel_correspondence_bed</code>, <code>roi_correspondence_bed</code>, <code>msisensorpro_all</code>,
-<code>msisensorpro_unstable</code>, <code>report_viz</code>, <code>report_data</code>, <code>report_log</code>
-(Directory).</p>
-<h2>Containers: development vs production</h2>
-<p>Tool tasks only name their image and call the tool directly:</p>
-<pre><code class="language-wdl">command &lt;&lt;&lt;
-    msisensor-pro pro -d "~{msi_list}" -t "~{bam}" -o "~{sample_name}" ...
-&gt;&gt;&gt;
-requirements {
-    container: container
-}
-</code></pre>
-<p>Development and production use the same backend, <code>slurm_apptainer</code>: sprocket submits every task
-with <code>sbatch</code> and runs it with <code>apptainer exec</code> in its image, mounting its <code>File</code>/<code>Directory</code>
-inputs and its work directory (nothing else of the host is visible).</p>
-<table><thead><tr><th></th><th>Development</th><th>Production</th></tr></thead><tbody>
-<tr><td>Config</td><td><code>backends.conf/sprocket.prod.toml</code></td><td><code>backends.conf/sprocket.prod.toml</code></td></tr>
-<tr><td>Slurm</td><td>single node on this workstation (<code>backends.conf/slurm-local/install.sh</code>)</td><td>the cluster, partition <code>prod</code>, 600 min</td></tr>
-<tr><td><code>*_container</code> (<code>params/containers.json</code>)</td><td><code>file://.../apptainer-recipes/&lt;tool&gt;.sif</code></td><td><code>file:///bioinfo/apptainer_sif/&lt;tool&gt;_&lt;version&gt;.sif</code></td></tr>
-</tbody></table>
-<p>The workflow's python scripts are deliberately <strong>not</strong> in the image: they are <code>File</code> inputs (<code>msi_main_helper</code>, <code>msi_report_helper</code>),
-versioned with the WDL, so editing them needs no image rebuild (a frozen image with the scripts inside
-only if the workflow is ever distributed without this folder).</p>
-<p>Every task only reads its inputs and writes in its own directory (the run directory is a
-<code>Directory</code> input, the reports are <code>Directory</code> outputs). The reports folder (<code>$VIZ</code>) is only
-written by <code>index</code>, after the run.</p>
+<code>msisensorpro_unstable</code>, <code>report_viz</code> (Directory).</p>
 <h2>Files</h2>
 <table><thead><tr><th>File</th><th>Role</th></tr></thead><tbody>
 <tr><td><code>msi_detection-0.1.0.wdl</code></td><td>The workflow</td></tr>
@@ -366,27 +445,15 @@ written by <code>index</code>, after the run.</p>
 <tr><td><code>main-scripts/msi_detection_report_p.py</code></td><td>Report step of the workflow (<code>msi_report_helper</code>): this run's pages (page icon embedded)</td></tr>
 <tr><td><code>main-scripts/msi_detection_post_p.py</code></td><td>After the workflow: <code>index</code>, the all-runs dashboard (run by <code>BASH.sprocket.cron.sh</code> / <code>BASH.sprocket.batch.sh</code>)</td></tr>
 <tr><td><code>apptainer-recipes/python-3.12.def</code></td><td>Generic python3 + awk image of the python/bash tasks</td></tr>
-<tr><td><code>params/containers.json</code></td><td>Images and python helpers of the workflow (passed to every <code>sprocket run</code>)</td></tr>
+<tr><td><code>params/install.json</code></td><td>Images and python helpers of the workflow (passed to every <code>sprocket run</code>)</td></tr>
 <tr><td><code>params/template.json</code></td><td>Params JSON template (GRCh37, Juno v3 panel, ROI hg19): <code>pre_process</code> fills <code>run</code> per run</td></tr>
 <tr><td><code>backends.conf/sprocket.prod.toml</code></td><td>sprocket config: Slurm + Apptainer</td></tr>
 <tr><td><code>backends.conf/slurm-local/</code></td><td>Single-node Slurm of this workstation (<code>sudo ./install.sh</code>)</td></tr>
 <tr><td><code>BASH.sprocket.cron.sh</code>, <code>companion-scripts/BASH.sprocket.batch.sh</code></td><td><code>sprocket run</code> with this folder's config: cron mode (run found by pre_process) / batch mode (folder of params JSON)</td></tr>
 <tr><td><code>companion-scripts/make_configs.py</code>, <code>BASH.make_configs.sh</code></td><td>Batch mode, before: <code>&lt;run&gt;_params.json</code> of the given runs of a BAM group folder (<code>failed-runs.txt</code>: runs without BAM); its Slurm/Apptainer launcher</td></tr>
 <tr><td><code>companion-scripts/export_tsv.py</code>, <code>BASH.export_tsv.sh</code></td><td>Batch mode, after: results of a reports folder as a TSV, one line per sample; its Slurm/Apptainer launcher</td></tr>
+<tr><td><code>companion-scripts/make_msi_locker.py</code></td><td>Cron mode, before the first launch: adds every run finished by ADIVAR to the MSI locker</td></tr>
 <tr><td><code>BASH.doc.sh</code>, <code>apptainer-recipes/sprocket-doc-0.31.0.def</code></td><td>HTML documentation (<code>docs/</code>, generated) and its image</td></tr>
 <tr><td><code>diagram/msi_detection_metromap.drawio</code> / <code>.preview.png</code>, <code>diagram/BASH.render_png.sh</code></td><td>Workflow diagram, its PNG export</td></tr>
 </tbody></table>
-<h2>HTML documentation</h2>
-<p>Generated by sprocket from the WDL's <code>meta</code> / <code>parameter_meta</code>, with this README as home page:</p>
-<pre><code class="language-sh">./BASH.doc.sh        # sprocket dev doc . --output docs --index-page README.md ... + diagram copy
-</code></pre>
-<p>Open <code>docs/index.html</code>. The search bar needs the pages to be served over http (browsers block its
-index files from <code>file://</code>):</p>
-<pre><code class="language-sh">python3 -m http.server -d docs 8000      # then http://localhost:8000
-</code></pre>
-<p><code>BASH.doc.sh</code> runs <code>sprocket dev doc</code> in <code>apptainer-recipes/sprocket-doc-0.31.0.sif</code> (sprocket +
-Node.js + <code>pagefind</code>, pre-cached for the search index): nothing to install on the host, no download.
-Rebuild the image with:</p>
-<pre><code class="language-sh">cd apptainer-recipes &amp;&amp; apptainer build --fakeroot sprocket-doc-0.31.0.sif sprocket-doc-0.31.0.def
-</code></pre>
 </div></div></div></div><div class="layout__main-rail"><div class="right-sidebar__container"><div class="right-sidebar__sticky"><div class="right-sidebar__header">ON THIS PAGE</div><nav id="page-sections" data-page-sections></nav><div class="right-sidebar__back-to-top-container"><a href="#title" x-on:click.prevent="(document.querySelector('.layout__main-center') || document.scrollingElement).scrollTo({ top: 0, behavior: 'smooth' })" class="right-sidebar__back-to-top"><span class="right-sidebar__back-to-top-icon">↑</span><span class="right-sidebar__back-to-top-text">Back to top</span></a></div></div></div></div></div></div></div></body></html>

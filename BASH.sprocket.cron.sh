@@ -11,7 +11,7 @@ WDL=$WDL_DIR/msi_detection-0.1.0.wdl
 SPROCKET_CONFIG=$WDL_DIR/backends.conf/sprocket.prod.toml
 # Images and python helpers (paths of this machine), before each run's params
 # JSON: the last file wins, so a params JSON can still override them.
-CONTAINERS=$WDL_DIR/params/containers.json
+INSTALL=$WDL_DIR/params/install.json
 TEMPLATE=$WDL_DIR/params/template.json
 
 VIZ=/media/jp/SSD2/CHU/test/viz
@@ -59,8 +59,8 @@ index() {
 # Name: its BAM folder, e.g. Run141_Juno) and prints its path (nothing: no run
 # to analyse). It also adds the run to the MSI locker before it runs: a later
 # launch (cron) never takes it again, nor is a failed run retried (remove its
-# line to rerun it). pre_process fails (see its ERROR lines above) when the run is
-# rejected or more than one run is left.
+# line to rerun it). pre_process fails (see its ERROR lines above) when the run
+# has no Experiment Name or BAM, or more than one run is left.
 # The run is first read from the lockers (job msi-pick_run, --print-run), then
 # its Experiment Name from its SampleSheet.csv (job msi-experiment,
 # --print-experiment), so that pre_process gets only that SampleSheet.csv and
@@ -74,8 +74,8 @@ RUN_ID=$(python_slurm_job pick_run "$(ro "$LOCKER_ADIVAR"),$(ro "$LOCKER_MSI")" 
 SAMPLE_SHEET=$RUNS_DIR/$RUN_ID/SampleSheet.csv
 [ -f "$SAMPLE_SHEET" ] || { echo "$RUN_ID: no $SAMPLE_SHEET" >&2; exit 1; }
 
-# Fails (ERROR lines above) when its sample sheet is rejected: the run stays
-# out of the MSI locker, retried at the next launch.
+# Fails (ERROR lines above) when its sample sheet has no Experiment Name: the
+# run stays out of the MSI locker, retried at the next launch.
 EXPERIMENT=$(python_slurm_job experiment "$(ro "$LOCKER_ADIVAR"),$(ro "$LOCKER_MSI"),$(ro "$SAMPLE_SHEET")" \
 	msi_detection_pre_p.py --print-experiment --runs-dir "$RUNS_DIR" \
 	--locker-adivar "$LOCKER_ADIVAR" --locker-msi "$LOCKER_MSI") \
@@ -96,5 +96,5 @@ CONFIG=$(python_slurm_job pre_process "$(ro "$SAMPLE_SHEET"),$(ro "$RUN_BAMS"),$
 RUN=msi_detection/$(basename "$CONFIG" .json)
 echo "=== $CONFIG"
 # Its outputs JSON (stdout) stays out of the cron log: it is the run's outputs.json.
-sprocket run -v -s -c "$SPROCKET_CONFIG" -o "$WORK/sprocket" --index-on "$RUN" "$WDL" "@$CONTAINERS" "@$CONFIG" >/dev/null
+sprocket run -v -s -c "$SPROCKET_CONFIG" -o "$WORK/sprocket" --index-on "$RUN" "$WDL" "@$INSTALL" "@$CONFIG" >/dev/null
 index "$RUN"

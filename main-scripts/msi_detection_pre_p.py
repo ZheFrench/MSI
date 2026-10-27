@@ -11,12 +11,11 @@ with. Steps:
        name per line: the runs already analysed): one run (the new one) or
        none; more is an error (exit 1, nothing written). --runs-dir is not
        listed.
-    3. For each run of the difference, the [Header] of its
-       <runs-dir>/<run>/SampleSheet.csv
-       must have Assay = Juno and Description = ADIVaR_Juno_INCa_v3
-       (otherwise the run is skipped); its Experiment Name is the only link
-       to its BAMs: the folder <bams-dir>/<Experiment Name>/, which must
-       hold at least one *.bam (the workflow's find_bams lists them all).
+    3. For each run of the difference, the Experiment Name of the [Header]
+       of its <runs-dir>/<run>/SampleSheet.csv is the only link to its BAMs:
+       the folder <bams-dir>/<Experiment Name>/, which must hold at least
+       one *.bam (the workflow's find_bams lists them all). The header is
+       not checked otherwise: the run comes from ADIVAR's locker.
     4. <output-dir>/<date>-<run>-<Experiment Name>.json (date:
        YYYY-MM-DD_HH-MM-SS): copy of --template with
        "msi_detection.inputs".run = <bams-dir>/<Experiment Name>.
@@ -44,7 +43,7 @@ analyse (nothing: none), so that the caller can give the container only its
 Steps 1-3 without the BAM folder (reads the lockers and the run's sample
 sheet, writes nothing): prints the run's Experiment Name (nothing: no run),
 so that the caller can give the container only <bams-dir>/<Experiment Name>/.
-Exits 1 when the sample sheet is missing or rejected.
+Exits 1 when the sample sheet or its Experiment Name is missing.
 """
 
 import argparse
@@ -57,9 +56,6 @@ from pathlib import Path
 
 # status of a run ADIVAR has finished, in its locker
 ADIVAR_DONE = 3
-
-# [Header] values a run must have to be analysed
-EXPECTED_HEADER = {"Assay": "Juno", "Description": "ADIVaR_Juno_INCa_v3"}
 
 logger = logging.getLogger("MSI-pre-processing")
 
@@ -115,20 +111,14 @@ def read_samplesheet_header(path: Path) -> dict:
 
 
 def read_experiment(run_dir: Path) -> str:
-    """Checks run_dir's sample sheet header and returns its Experiment Name
-    (the name of its BAM folder); None (error logged) when the run cannot be
-    analysed."""
+    """Experiment Name of run_dir's sample sheet header (the name of its BAM
+    folder); None (error logged) when the sample sheet or its Experiment Name
+    is missing."""
     sheet = run_dir / "SampleSheet.csv"
     if not sheet.is_file():
         logger.error(f"{run_dir.name}: no {sheet}")
         return None
-    header = read_samplesheet_header(sheet)
-
-    for key, expected in EXPECTED_HEADER.items():
-        if header.get(key) != expected:
-            logger.error(f"{run_dir.name}: {key} = {header.get(key)!r} in {sheet}, expected {expected!r}")
-            return None
-    experiment = header.get("Experiment Name")
+    experiment = read_samplesheet_header(sheet).get("Experiment Name")
     if not experiment:
         logger.error(f"{run_dir.name}: no Experiment Name in {sheet}")
         return None
@@ -136,7 +126,7 @@ def read_experiment(run_dir: Path) -> str:
 
 
 def make_params(run_dir: Path, bams_dir: Path, template: dict, output_dir: Path) -> Path:
-    """Checks run_dir's sample sheet header and BAM folder, writes its params
+    """Checks run_dir's Experiment Name and BAM folder, writes its params
     JSON and returns its path; None (error logged) when the run cannot be
     analysed."""
     experiment = read_experiment(run_dir)
@@ -204,7 +194,7 @@ def main():
         print(experiment)
         return
 
-    # 3-5. Each run's sample sheet header and BAM folder -> its params JSON,
+    # 3-5. Each run's Experiment Name and BAM folder -> its params JSON,
     # then the run into the MSI locker
     runs_dir, output_dir = Path(args.runs_dir), Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

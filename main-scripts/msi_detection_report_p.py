@@ -8,19 +8,19 @@ msi_detection_main_p.py, the all-runs dashboard (after the workflow) in
 msi_detection_post_p.py, which imports this script's page code.
 
     report       --run-id RUN --samples samples.tsv --genome FASTA
-                 --data-output DIR --viz-output DIR --log-output DIR
+                 --viz-output DIR
                  --min-reads N --pval-cutoff P --sample-na-fraction F
                  --consensus-roi-cutoff C
                  [--roi-bed ROI_BED]
-        Copies every sample's raw msisensor-pro output under
-        <data-output>/<run_id>/<library>/, then generates this run's HTML
-        reports (never changed afterwards):
+        Reads every sample's msisensor-pro *_all (where the workflow gives it,
+        nothing copied) and generates this run's HTML reports (never changed
+        afterwards); its log goes to the console (the task's stderr):
 
     <viz-output>/runs/<run_id>/<run_id>_index_run.html            - one row per sample, one column-group per library
     <viz-output>/runs/<run_id>/<sample>_index_sample.html         - that sample's result pooled across its libraries
 
 samples.tsv (written by the workflow, no header) has one line per BAM:
-    sample_name  library  bam_path  all  unstable  dis  summary
+    sample_name  library  bam_path  all
 library is the BAM's folder relative to input_dir ("." when the BAM sits
 directly in it). A failed BAM fails the workflow before report runs.
 
@@ -36,7 +36,6 @@ import csv
 import json
 import logging
 import re
-import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -57,7 +56,7 @@ UNSTABLE_COLUMNS = [
     "CovReads",
 ]
 # Columns of the workflow's samples TSV (one row per BAM)
-SAMPLES_TSV_COLUMNS = ["sample_name", "library", "bam_path", "all", "unstable", "dis", "summary"]
+SAMPLES_TSV_COLUMNS = ["sample_name", "library", "bam_path", "all"]
 
 # Reports folder: viz/runs/<run_id>/ per run, and the all-runs dashboard
 # (its data files: msi_detection_post_p.py)
@@ -67,12 +66,9 @@ OUTPUT_INDEX_FILENAME = "index_msi_run.html"
 logger = logging.getLogger("MSI-detection")
 
 
-def setup_logging(run_id: str, log_dir: Path) -> Path:
-    """Configure the module logger: console + a per-run file under log_dir."""
-    log_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    log_path = log_dir / f"{run_id}_MSI_{timestamp}.log"
-
+def setup_logging() -> None:
+    """Configure the module logger: console only (stderr, kept by sprocket in
+    the task's folder)."""
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S")
 
     logger.setLevel(logging.INFO)
@@ -81,12 +77,6 @@ def setup_logging(run_id: str, log_dir: Path) -> Path:
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
-
-    file_handler = logging.FileHandler(log_path)
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-
-    return log_path
 
 
 def fatal(msg: str) -> NoReturn:
@@ -831,18 +821,17 @@ def write_data_js(js_path: Path, var_name: str, data) -> None:
     js_path.write_text(f"window.{var_name} = {json.dumps(data, indent=2)};\n")
 
 
-def compute_sample_meta(data_library_dir: Path, sample_name: str, bam_path: Path,
+def compute_sample_meta(all_path: Path, sample_name: str, bam_path: Path,
                         genome: str, run_id: str, library: str = None, sample_key: str = None) -> dict:
-    """Compute this (sample, library)'s stats from its raw msisensor-pro output
-    (read from data/, where every sample of this library sits directly, named
-    with the sample as a prefix). Nothing is written: the returned dict is one
-    entry of the run's "samples" list, serialized once into <run_id>_index_run.js.
+    """Compute this (sample, library)'s stats from its msisensor-pro *_all
+    (all_path). Nothing is written: the returned dict is one entry of the
+    run's "samples" list, serialized once into <run_id>_index_run.js.
     """
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     # msisensor-pro's own summary output is empty in tumor-only mode, so the
     # "% unstable" MSI score is recomputed here from *_all: unstable sites
     # over evaluated sites, both counting only sites with >= MIN_READS reads.
-    all_rows = parse_msisensor_tsv(data_library_dir / f"{sample_name}_all")
+    all_rows = parse_msisensor_tsv(all_path)
     unstable_region_count = len(counted_unstable_keys(all_rows))
     region_count = len(counted_site_keys(all_rows))
     pct_region_unstable = pct(unstable_region_count, region_count)
@@ -870,8 +859,9 @@ def serialize_sample_rows_to_js(viz_run_dir: Path, sample_name: str, rows: list)
     return data_file
 
 
-def load_sample_library_rows(run_dir: Path, samples: list, roi_bed_path=None) -> dict:
-    """Re-read every ok sample's *_all file (every site MSIsensor-pro
+def load_sample_library_rows(all_paths: dict, samples: list, roi_bed_path=None) -> dict:
+    """Re-read every ok sample's *_all file (all_paths: (sample_name, library)
+    -> its path; every site MSIsensor-pro
     evaluated for that library, not just the ones it called unstable) into
     sample_name -> library -> rows, tagging each row with roi_marker (the
     classic MSI marker name, e.g. "BAT26", or "" if the site isn't one) from
@@ -892,9 +882,7 @@ def load_sample_library_rows(run_dir: Path, samples: list, roi_bed_path=None) ->
         if s.get("failed"):
             continue
         library = s.get("library") or "-"
-        lib_dir = Path(s["library"]) if s.get("library") else Path(".")
-        all_path = run_dir / lib_dir / f'{s["sample_name"]}_all'
-        rows = parse_msisensor_tsv(all_path)
+        rows = parse_msisensor_tsv(all_paths[(s["sample_name"], s.get("library"))])
         for row in rows:
             row["library"] = library
             row["roi_marker"] = roi_markers.get((row["chromosome"], row["location"]), "")
@@ -959,7 +947,7 @@ def write_sample_group_indexes(run_dir: Path, run_id: str, samples: list, rows_b
 
 
 # ---------------------------------------------------------------------------
-# report: publish raw outputs to data/, (re)generate viz/
+# report: (re)generate viz/
 # ---------------------------------------------------------------------------
 
 def read_samples_tsv(path: Path) -> list:
@@ -972,40 +960,23 @@ def read_samples_tsv(path: Path) -> list:
     return rows
 
 
-def publish_raw_outputs(row: dict, data_library_dir: Path) -> None:
-    """Copy one sample's msisensor-pro output files from its WDL task directory
-    into data/<run_id>/<library>/, named <sample>, <sample>_all, ...
-    exactly as msisensor-pro's own -o prefix names them."""
-    data_library_dir.mkdir(parents=True, exist_ok=True)
-    for column, suffix in (("summary", ""), ("all", "_all"), ("dis", "_dis"), ("unstable", "_unstable")):
-        if row[column]:
-            shutil.copyfile(row[column], data_library_dir / f'{row["sample_name"]}{suffix}')
-
-
 def report(args) -> None:
     global MIN_READS, MSI_PVAL_CUTOFF, SAMPLE_NA_FRACTION, MSI_CONSENSUS_ROI_CUTOFF
     MIN_READS, MSI_PVAL_CUTOFF, SAMPLE_NA_FRACTION = args.min_reads, args.pval_cutoff, args.sample_na_fraction
     MSI_CONSENSUS_ROI_CUTOFF = args.consensus_roi_cutoff
     run_id = args.run_id
-
-    viz_dir = Path(args.viz_output)
-    data_dir = Path(args.data_output)
-    viz_dir.mkdir(parents=True, exist_ok=True)
-    data_dir.mkdir(parents=True, exist_ok=True)
-    log_path = setup_logging(run_id, Path(args.log_output))
-    logger.info(f"Log file: {log_path}")
+    setup_logging()
 
     samples = read_samples_tsv(Path(args.samples))
 
-    # Every generated .html/.js/.json report lives under viz/runs/<run_id>/;
-    # every raw msisensor-pro output file under data/<run_id>/<library>/.
-    viz_run_dir = viz_dir / RUNS_DIRNAME / run_id
-    data_run_dir = data_dir / run_id
+    # Every generated .html/.js report lives under viz/runs/<run_id>/.
+    viz_run_dir = Path(args.viz_output) / RUNS_DIRNAME / run_id
     viz_run_dir.mkdir(parents=True, exist_ok=True)
-    data_run_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"{len(samples)} BAM file(s) processed -> run {run_id}")
 
     sample_metas = []
+    # (sample_name, library) -> its *_all, read again by load_sample_library_rows
+    all_paths = {}
     for row in samples:
         sample_name = row["sample_name"]
         # A run directory can hold several libraries as subfolders (e.g.
@@ -1016,15 +987,14 @@ def report(args) -> None:
         library = rel_dir.as_posix() if rel_dir != Path(".") else None
         sample_key = (rel_dir / sample_name).as_posix()
         bam_name = Path(row["bam_path"]).name
-        data_library_dir = data_run_dir / rel_dir
-        publish_raw_outputs(row, data_library_dir)
-        logger.info(f"{bam_name} (sample: {sample_key}) -> {data_library_dir}")
-        sample_metas.append(compute_sample_meta(data_library_dir, sample_name, Path(row["bam_path"]),
+        all_paths[(sample_name, library)] = Path(row["all"])
+        logger.info(f"{bam_name} (sample: {sample_key})")
+        sample_metas.append(compute_sample_meta(Path(row["all"]), sample_name, Path(row["bam_path"]),
                                                 args.genome, run_id, library, sample_key))
 
     if args.roi_bed:
         logger.info(f"ROI correspondence BED: {args.roi_bed}")
-    rows_by_sample = load_sample_library_rows(data_run_dir, sample_metas, args.roi_bed)
+    rows_by_sample = load_sample_library_rows(all_paths, sample_metas, args.roi_bed)
     started_at = write_run_index(viz_run_dir, run_id, sample_metas, rows_by_sample)
     write_sample_group_indexes(viz_run_dir, run_id, sample_metas, rows_by_sample)
 
@@ -1037,13 +1007,11 @@ def main():
     parser = argparse.ArgumentParser(description="Report step of the msi_detection-0.1.0.wdl workflow (inside its ta03_report task).")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("report", help="Publish raw outputs to data/ and generate this run's viz/runs/<run_id>/ pages.")
+    p = sub.add_parser("report", help="Generate this run's viz/runs/<run_id>/ pages.")
     p.add_argument("--run-id", required=True)
     p.add_argument("--samples", required=True, help="samples.tsv written by the workflow.")
     p.add_argument("--genome", required=True, help="Reference fasta (only recorded in the reports).")
-    p.add_argument("--data-output", required=True)
     p.add_argument("--viz-output", required=True)
-    p.add_argument("--log-output", required=True)
     p.add_argument("--roi-bed", default=None, help="ROI correspondence BED (from the roi bedtools_intersect task).")
     p.add_argument("--min-reads", type=int, required=True, help="A site counts only with >= this many reads.")
     p.add_argument("--pval-cutoff", type=float, required=True, help="A site is unstable when its p-value is above this.")

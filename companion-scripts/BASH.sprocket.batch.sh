@@ -13,7 +13,7 @@ WDL=$WDL_DIR/msi_detection-0.1.0.wdl
 SPROCKET_CONFIG=$WDL_DIR/backends.conf/sprocket.prod.toml
 # Images and python helpers (paths of this machine), before each run's params
 # JSON: the last file wins, so a params JSON can still override them.
-CONTAINERS=$WDL_DIR/params/containers.json
+INSTALL=$WDL_DIR/params/install.json
 
 # Folder of the params JSON to run.
 CONFIGS=${1:?usage: $0 CONFIG_DIR OUT_DIR}
@@ -62,7 +62,7 @@ for p in $LIST; do
 	# Named after its params JSON: $WORK/sprocket/index/msi_detection/<name>/
 	# (links to its outputs and its outputs.json).
 	RUN=msi_detection/$(basename "$p" .json)
-	if sprocket run -v -s -c "$SPROCKET_CONFIG" -o "$WORK/sprocket" --index-on "$RUN" "$WDL" "@$CONTAINERS" "@$p" && index "$RUN"; then
+	if sprocket run -v -s -c "$SPROCKET_CONFIG" -o "$WORK/sprocket" --index-on "$RUN" "$WDL" "@$INSTALL" "@$p" && index "$RUN"; then
 		echo "    ok"
 	else
 		echo "    FAILED"

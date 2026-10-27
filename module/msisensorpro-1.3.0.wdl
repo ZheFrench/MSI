@@ -20,8 +20,8 @@ version 1.3
 # tasks. Each task names its image (requirements.container) and calls
 # `msisensor-pro` directly.
 #
-#   import "module/msisensorpro-1.3.0.wdl" as msisensorpro
-#   call msisensorpro.scan { ... }   call msisensorpro.pro { ... }
+#   import "module/msisensorpro-1.3.0.wdl" as sensorpro
+#   call sensorpro.scan { ... }   call sensorpro.pro { ... }
 
 task scan {
 	meta {
