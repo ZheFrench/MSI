@@ -1,8 +1,9 @@
-#  Microsatellite instability (MSI) detection
+#  Microsatellite instability (MSI) detection Workflow
 
-## Indroduction
+## Introduction
 
-WDL workflow, run with [sprocket](https://sprocket.bio), for microsatellite instability (MSI) detection.
+This workflow detects microsatellite instability (MSI). It is written in [WDL](https://openwdl.org/) and run with
+[sprocket](https://sprocket.bio) on a Slurm + Apptainer backend.
 It uses two tool modules, MSIsensor-pro and bedtools, and three Apptainer images: one per tool plus
 a generic Python image for the other steps.
 
@@ -17,9 +18,9 @@ the classic MSI markers (BAT25, BAT26, NR21...) among them.
 
 In cron mode, the pipeline compares two lockers: ADIVAR's (JSON, `status` 3 = finished) and the MSI
 locker (text, one run per line = already analysed). A run finished by ADIVAR and not yet in the MSI
-locker is analysed, then added to it. Before the first launch, build the MSI locker from ADIVAR's
-(`companion-scripts/make_msi_locker.py`, see [Configuration](#configuration-to-set-at-install)), so
-that past runs are not re-analysed. As a safeguard, the cron only launches when exactly one run
+locker is analysed, then added to it.
+
+As a safeguard, the cron only launches when exactly one run
 differs between the two lockers: with more, it stops with an error and analyses nothing.
 
 For the picked run, the pipeline reads a single field of its `SampleSheet.csv`: the Experiment Name, which gives the BAM folder to analyse.
