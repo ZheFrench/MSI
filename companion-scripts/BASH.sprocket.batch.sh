@@ -33,7 +33,7 @@ ro() {
 python_slurm_job() {
 	name=$1; binds=$2; script=$3; shift 3
 	srun --partition=prod --ntasks=1 --cpus-per-task=1 --mem=1G --job-name="msi-$name" \
-		apptainer exec --bind "$(ro "$WDL_DIR"),$binds" \
+		apptainer exec --cleanenv --bind "$(ro "$WDL_DIR"),$binds" \
 		"$WDL_DIR/apptainer-recipes/python-3.12.sif" \
 		python3 "$WDL_DIR/main-scripts/$script" "$@"
 }

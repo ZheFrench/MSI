@@ -137,11 +137,7 @@ differs between the two lockers: with more, it stops with an error and analyses 
 <li><a href="#introduction" rel="noopener noreferrer">Introduction</a></li>
 <li><a href="#before-the-first-cron-launch" rel="noopener noreferrer">Before the first cron launch</a></li>
 <li><a href="#configuration" rel="noopener noreferrer">Configuration</a></li>
-<li><a href="#quick-start" rel="noopener noreferrer">Quick start</a>
-<ul>
-<li><a href="#batch-mode-params-json-and-tsv-export" rel="noopener noreferrer">Batch mode: params JSON and TSV export</a></li>
-</ul>
-</li>
+<li><a href="#the-cron-steps" rel="noopener noreferrer">The cron steps</a></li>
 <li><a href="#tasks" rel="noopener noreferrer">Tasks</a></li>
 <li><a href="#inputs" rel="noopener noreferrer">Inputs</a></li>
 <li><a href="#outputs" rel="noopener noreferrer">Outputs</a></li>
@@ -189,48 +185,10 @@ chr14	23652317	23652397	NR21	0	+
 <tr><td><code>LOCKER_ADIVAR</code></td><td>ADIVAR's locker (read only)</td></tr>
 <tr><td><code>LOCKER_MSI</code></td><td>MSI locker (runs already taken), created if missing</td></tr>
 </tbody></table>
-<p><strong><code>companion-scripts/BASH.sprocket.batch.sh</code></strong> (batch mode): <code>WDL_DIR</code> and the same <code>srun</code> line; <code>VIZ</code>
-and <code>WORK</code>, the same two folders as above, are its required arguments.</p>
-<p><strong><code>backends.conf/sprocket.prod.toml</code></strong></p>
-<table><thead><tr><th>Key</th><th>Value</th><th>Role</th></tr></thead><tbody>
-<tr><td><code>[run.backends.slurm.sbatch] args</code></td><td><code>["--partition=prod"]</code></td><td>partition (and any other <code>sbatch</code> option) of the tasks</td></tr>
-<tr><td><code>[run.task] cache_dir</code></td><td>a folder</td><td>sprocket's call cache (shared by all the runs)</td></tr>
-<tr><td><code>[run.backends.slurm] interval</code></td><td><code>5</code></td><td>seconds between two <code>sacct</code> polls: short for local tests, raise it on the cluster</td></tr>
-<tr><td><code>max_concurrency</code>, <code>[run.workflow.scatter] concurrency</code></td><td><code>50</code>, <code>10</code></td><td>jobs submitted at once, scatter elements in parallel</td></tr>
-</tbody></table>
-<p><strong><code>params/template.json</code></strong> (copied by <code>pre_process</code> for each run; <code>run</code> and <code>samples</code> stay empty, filled per run)</p>
-<table><thead><tr><th>Key</th><th>Role</th></tr></thead><tbody>
-<tr><td><code>msi_detection.references.genome</code></td><td>reference FASTA (e.g. GRCh37)</td></tr>
-<tr><td><code>msi_detection.references.bed_panel</code></td><td>BED of the sequencing panel</td></tr>
-<tr><td><code>msi_detection.references.bed_roi</code></td><td>BED of the ROI markers</td></tr>
-<tr><td><code>msi_detection.params</code></td><td><code>threads</code> (CPUs of each <code>msisensor-pro pro</code> only), <code>coverage_threshold</code>, <code>p_process</code> thresholds</td></tr>
-</tbody></table>
-<p><strong><code>params/install.json</code></strong>: what depends on the installation, not on the run: the workflow's
-images and python helpers (scripts given to the tasks as <code>File</code>, not built into the image), the
-only place they are set (absolute paths; images as <code>file://</code> + path). These five WDL inputs have no default: both
-scripts pass this file before each run's params JSON (<code>sprocket run ... @install.json @&lt;params&gt;.json</code>;
-for a key in both, the last file wins, so a params JSON can still override an image for its run).
-Forgetting it stops sprocket before anything runs (<code>missing required input</code>).</p>
-<table><thead><tr><th>Key</th><th>Points to</th></tr></thead><tbody>
-<tr><td><code>msi_detection.msisensorpro_container</code></td><td><code>apptainer-recipes/msisensor-pro-1.3.0.sif</code></td></tr>
-<tr><td><code>msi_detection.bedtools_container</code></td><td><code>apptainer-recipes/bedtools-2.31.1.sif</code></td></tr>
-<tr><td><code>msi_detection.python_container</code></td><td><code>apptainer-recipes/python-3.12.sif</code></td></tr>
-<tr><td><code>msi_detection.msi_main_helper</code></td><td><code>main-scripts/msi_detection_main_p.py</code></td></tr>
-<tr><td><code>msi_detection.msi_report_helper</code></td><td><code>main-scripts/msi_detection_report_p.py</code></td></tr>
-</tbody></table>
-<p>The images of the scripts' own Slurm jobs follow <code>WDL_DIR</code>: <code>$WDL_DIR/apptainer-recipes/python-3.12.sif</code>
-(<code>python_slurm_job</code> of <code>BASH.sprocket.cron.sh</code> / <code>BASH.sprocket.batch.sh</code>: pick_run, experiment,
-pre_process, index) and <code>$WDL_DIR/apptainer-recipes/sprocket-doc-0.31.0.sif</code> (<code>BASH.doc.sh</code>).</p>
 <p><strong>crontab</strong> (not in this folder), for example every 30 min with a log:</p>
 <pre><code class="language-sh">*/30 * * * * /path/to/pipeline-jp/BASH.sprocket.cron.sh &gt;&gt; /path/to/cron.log 2&gt;&amp;1
 </code></pre>
-<h2>Quick start</h2>
-<pre><code class="language-sh">cd /path/to/pipeline-jp
-./BASH.sprocket.cron.sh                       # cron mode: pre_process picks the run left to analyse, then runs it
-./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR VIZ WORK   # batch mode: every params JSON of CONFIG_DIR
-</code></pre>
-<p>The batch mode runs <code>sprocket</code> in the current shell (hours for a whole group): launch it in
-<code>screen</code> / <code>tmux</code>, or a lost terminal / SSH session stops it. Not needed for the cron mode (no terminal).</p>
+<h2>The cron steps</h2>
 <p><code>BASH.sprocket.cron.sh</code> (cron) first runs <code>msi_detection_pre_p.py</code> three times, each container
 mounting only what that step reads:</p>
 <ol>
@@ -246,8 +204,9 @@ to the locker.</li>
 Experiment Name or a missing BAM folder stops the script before the run is locked (retried at the next launch).
 Then both scripts, for each params JSON:</p>
 <ol>
-<li>sets the destinations, hardcoded in the script (not in the params): <code>VIZ</code> (reports folder) and
-<code>WORK</code> (sprocket's runs), created if needed;</li>
+<li>sets the destinations <code>VIZ</code> (reports folder) and <code>WORK</code> (sprocket's runs), created if needed:
+hardcoded in <code>BASH.sprocket.cron.sh</code>, arguments of <code>BASH.sprocket.batch.sh</code>; never in the WDL
+nor in the params JSON;</li>
 <li>runs <code>sprocket run -s -c $SPROCKET_CONFIG</code> (<code>backends.conf/sprocket.prod.toml</code>) in
 <code>$WORK/sprocket/runs/msi_detection/&lt;timestamp&gt;/</code>, one folder per task;</li>
 <li>runs <code>msi_detection_post_p.py index</code> as a Slurm job (<code>srun</code>, in <code>python-3.12.sif</code>): copies the run's

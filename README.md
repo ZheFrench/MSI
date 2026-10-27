@@ -64,8 +64,7 @@ Cron mode, e.g. every 4 hours on Thursdays and Fridays:
 - [Introduction](#introduction)
 - [Before the first cron launch](#before-the-first-cron-launch)
 - [Configuration](#configuration)
-- [Quick start](#quick-start)
-  - [Batch mode: params JSON and TSV export](#batch-mode-params-json-and-tsv-export)
+- [The cron steps](#the-cron-steps)
 - [Tasks](#tasks)
 - [Inputs](#inputs)
 - [Outputs](#outputs)
@@ -126,63 +125,14 @@ Set the workflow's thresholds in the same file, under `msi_detection.params` (cu
 | `LOCKER_MSI` | MSI locker (runs already taken), created if missing |
 
 
-**`companion-scripts/BASH.sprocket.batch.sh`** (batch mode): `WDL_DIR` and the same `srun` line; `VIZ`
-and `WORK`, the same two folders as above, are its required arguments.
-
-**`backends.conf/sprocket.prod.toml`**
-
-| Key | Value | Role |
-|---|---|---|
-| `[run.backends.slurm.sbatch] args` | `["--partition=prod"]` | partition (and any other `sbatch` option) of the tasks |
-| `[run.task] cache_dir` | a folder | sprocket's call cache (shared by all the runs) |
-| `[run.backends.slurm] interval` | `5` | seconds between two `sacct` polls: short for local tests, raise it on the cluster |
-| `max_concurrency`, `[run.workflow.scatter] concurrency` | `50`, `10` | jobs submitted at once, scatter elements in parallel |
-
-**`params/template.json`** (copied by `pre_process` for each run; `run` and `samples` stay empty, filled per run)
-
-| Key | Role |
-|---|---|
-| `msi_detection.references.genome` | reference FASTA (e.g. GRCh37) |
-| `msi_detection.references.bed_panel` | BED of the sequencing panel |
-| `msi_detection.references.bed_roi` | BED of the ROI markers |
-| `msi_detection.params` | `threads` (CPUs of each `msisensor-pro pro` only), `coverage_threshold`, `p_process` thresholds |
-
-**`params/install.json`**: what depends on the installation, not on the run: the workflow's
-images and python helpers (scripts given to the tasks as `File`, not built into the image), the
-only place they are set (absolute paths; images as `file://` + path). These five WDL inputs have no default: both
-scripts pass this file before each run's params JSON (`sprocket run ... @install.json @<params>.json`;
-for a key in both, the last file wins, so a params JSON can still override an image for its run).
-Forgetting it stops sprocket before anything runs (`missing required input`).
-
-| Key | Points to |
-|---|---|
-| `msi_detection.msisensorpro_container` | `apptainer-recipes/msisensor-pro-1.3.0.sif` |
-| `msi_detection.bedtools_container` | `apptainer-recipes/bedtools-2.31.1.sif` |
-| `msi_detection.python_container` | `apptainer-recipes/python-3.12.sif` |
-| `msi_detection.msi_main_helper` | `main-scripts/msi_detection_main_p.py` |
-| `msi_detection.msi_report_helper` | `main-scripts/msi_detection_report_p.py` |
-
-The images of the scripts' own Slurm jobs follow `WDL_DIR`: `$WDL_DIR/apptainer-recipes/python-3.12.sif`
-(`python_slurm_job` of `BASH.sprocket.cron.sh` / `BASH.sprocket.batch.sh`: pick_run, experiment,
-pre_process, index) and `$WDL_DIR/apptainer-recipes/sprocket-doc-0.31.0.sif` (`BASH.doc.sh`).
-
 **crontab** (not in this folder), for example every 30 min with a log:
 
 ```sh
 */30 * * * * /path/to/pipeline-jp/BASH.sprocket.cron.sh >> /path/to/cron.log 2>&1
 ```
 
+## The cron steps
 
-## Quick start
-
-```sh
-cd /path/to/pipeline-jp
-./BASH.sprocket.cron.sh                       # cron mode: pre_process picks the run left to analyse, then runs it
-./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR VIZ WORK   # batch mode: every params JSON of CONFIG_DIR
-```
-
-The batch mode runs `sprocket` in the current shell (hours for a whole group): launch it in
-`screen` / `tmux`, or a lost terminal / SSH session stops it. Not needed for the cron mode (no terminal).
 
 `BASH.sprocket.cron.sh` (cron) first runs `msi_detection_pre_p.py` three times, each container
 mounting only what that step reads:
@@ -199,8 +149,8 @@ Neither the whole `$RUNS_DIR` nor the whole `$BAMS_DIR` is mounted. A sample she
 Experiment Name or a missing BAM folder stops the script before the run is locked (retried at the next launch).
 Then both scripts, for each params JSON:
 
-1. sets the destinations, hardcoded in the script (not in the params): `VIZ` (reports folder) and
-   `WORK` (sprocket's runs), created if needed;
+1. sets the destinations `VIZ` (reports folder) and `WORK` (sprocket's runs), created if needed:
+   hardcoded in `BASH.sprocket.cron.sh`.
 2. runs `sprocket run -s -c $SPROCKET_CONFIG` (`backends.conf/sprocket.prod.toml`) in
    `$WORK/sprocket/runs/msi_detection/<timestamp>/`, one folder per task;
 3. runs `msi_detection_post_p.py index` as a Slurm job (`srun`, in `python-3.12.sif`): copies the run's
@@ -214,57 +164,6 @@ current reports would not be reproducible nor cacheable). `index` can be re-run 
 after deleting a run folder. Everything else stays in sprocket's run folder (paths in its
 `outputs.json`), every task keeping its `work/` folder (~300 MB per run).
 
-### Batch mode: params JSON and TSV export
-
-The params JSON of a batch come from `companion-scripts/make_configs.py`: given a group folder of
-BAM folders (one per run: `input/colon-msi`, `input/foie-mss`...) and run names, on the command line
-and/or in a text file, it writes `<run>_params.json` (copy of `params/template.json`,
-`run` = `<group folder>/<run>`) in `--output-dir` (required: the launcher's `OUTPUT_DIR`). The
-group folder picks the run, the same run name being in several groups.
-
-The runs file has one line per run, or per run + sample ID to analyse only some samples
-(columns separated by tabs or spaces, `#` comments allowed):
-
-```
-Run154_Juno                  # every BAM of the run (but the controls)
-Run171_Juno  C22D03556T      # only these samples of Run171_Juno
-Run171_Juno  C22D03587T
-```
-
-The sample IDs of a run go to `"msi_detection.inputs".samples`: `ta01_find_bams` then only keeps the
-BAMs whose name contains one of them (every library). A run without BAM, or with a sample ID
-matching no BAM of the run (checked before the workflow), gets no params JSON: its lines are written
-in `<output-dir>/failed-runs.txt` (same format as the runs file, for a rerun; removed when no run
-fails) and the script exits 1, the other runs being written.
-
-After the batch, `companion-scripts/export_tsv.py` writes the results of its reports folder as a
-TSV, one line per sample: `results_msi_<date>.tsv` (date `YYYY-MM-DD_HH-MM-SS`: each export is a new file), in the launcher's `OUTPUT_DIR` (required), in the reports folder with the python script alone (`--output-dir`). It recomputes nothing: it reads
-the dashboard data (`index_msi_sample.js`, then each sample's `runs/<run_id>/<sample>_index_sample.js`),
-so the table matches the dashboard. Columns: `run_id`, `sample_name`, `call`, `consensus_roi`,
-`consensus_total`, `pct_region_unstable`; per library `<lib>_unstable_region_count`,
-`<lib>_unstable_roi_count`; per ROI marker `<marker>` (its site status, the same for every library),
-then `<lib>_<marker>_pro_p` and `<lib>_<marker>_cov` for each library (no mean). Empty cell: no value.
-
-Both run through a launcher, like the other python steps: a Slurm job (`srun`, jobs
-`msi-make_configs` / `msi-export_tsv`) in `python-3.12.sif` (`python3 -I`), mounting the code
-read-only, what the script reads (read-only) and the folder it writes:
-
-```sh
-S=/path/to/data
-./companion-scripts/BASH.make_configs.sh $S/input/foie-mss $S/config/runs-test.txt $S/config/config-test
-./companion-scripts/BASH.sprocket.batch.sh $S/config/config-test $S/output/config-test/viz $S/output/config-test/work
-./companion-scripts/BASH.export_tsv.sh $S/output/config-test/viz $S/output/config-test      # -> $S/output/config-test/results_msi_<date>.tsv
-```
-
-The python scripts can also be run directly on the host (only the standard library):
-`make_configs.py BAMS_DIR [RUN ...] [--runs-file TXT] --output-dir DIR`,
-`export_tsv.py --viz VIZ_DIR [--output-dir DIR | --output TSV]`.
-
-Run by hand, with a params JSON written by `pre_process` (or a filled copy of `params/template.json`):
-
-```sh
-sprocket run -s -c backends.conf/sprocket.prod.toml msi_detection-0.1.0.wdl @params/install.json @$WORK/config/<date>-<run>-<Experiment Name>.json
-```
 
 ## Tasks
 
