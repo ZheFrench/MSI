@@ -16,6 +16,8 @@ TEMPLATE=$WDL_DIR/params/template.json
 
 VIZ=/media/jp/SSD2/CHU/test/viz
 WORK=/media/jp/SSD2/CHU/test/work
+# Parent folders: $RUNS_DIR/<run>/SampleSheet.csv (<run>: name in ADIVAR's
+# locker), $BAMS_DIR/<Experiment Name>/ (the run's BAMs, the workflow's input).
 RUNS_DIR=/media/jp/SSD2/CHU/input/fake-data/runs
 BAMS_DIR=/media/jp/SSD2/CHU/input/fake-data/fake_bam
 LOCKER_ADIVAR=/media/jp/SSD2/CHU/config/locker/adivar-testNS.json

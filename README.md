@@ -122,14 +122,14 @@ Set the workflow's thresholds in the same file, under `msi_detection.params` (cu
 | `WDL_DIR` | this folder |
 | `VIZ` | reports and dashboard (written by `index`) |
 | `WORK` | sprocket's runs (`sprocket/`) and the params JSON (`config/`) |
-| `RUNS_DIR` | one folder per sequencing run, with its `SampleSheet.csv` |
-| `BAMS_DIR` | one BAM folder per Experiment Name |
+| `RUNS_DIR` | parent folder of the sequencing run folders: the cron reads `$RUNS_DIR/<run>/SampleSheet.csv` (`<run>`: name in ADIVAR's locker) |
+| `BAMS_DIR` | parent folder of the BAM folders, each named after an Experiment Name: the run analysed is `$BAMS_DIR/<Experiment Name>/` |
 | `LOCKER_ADIVAR` | ADIVAR's locker (read only) |
 | `LOCKER_MSI` | MSI locker (runs already taken), created if missing |
 
 
-**`companion-scripts/BASH.sprocket.batch.sh`** (batch mode): `WDL_DIR` and the same `srun` line (its output folder
-`OUT_DIR`, which gets `viz/` and `work/`, is a required argument).
+**`companion-scripts/BASH.sprocket.batch.sh`** (batch mode): `WDL_DIR` and the same `srun` line; `VIZ`
+and `WORK`, the same two folders as above, are its required arguments.
 
 **`backends.conf/sprocket.prod.toml`**
 
@@ -180,7 +180,7 @@ pre_process, index) and `$WDL_DIR/apptainer-recipes/sprocket-doc-0.31.0.sif` (`B
 ```sh
 cd /path/to/pipeline-jp
 ./BASH.sprocket.cron.sh                       # cron mode: pre_process picks the run left to analyse, then runs it
-./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR OUT_DIR   # batch mode: every params JSON of CONFIG_DIR, outputs in OUT_DIR
+./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR VIZ WORK   # batch mode: every params JSON of CONFIG_DIR
 ```
 
 The batch mode runs `sprocket` in the current shell (hours for a whole group): launch it in
@@ -254,7 +254,7 @@ read-only, what the script reads (read-only) and the folder it writes:
 ```sh
 S=/path/to/data
 ./companion-scripts/BASH.make_configs.sh $S/input/foie-mss $S/config/runs-test.txt $S/config/config-test
-./companion-scripts/BASH.sprocket.batch.sh $S/config/config-test $S/output/config-test
+./companion-scripts/BASH.sprocket.batch.sh $S/config/config-test $S/output/config-test/viz $S/output/config-test/work
 ./companion-scripts/BASH.export_tsv.sh $S/output/config-test/viz $S/output/config-test      # -> $S/output/config-test/results_msi_<date>.tsv
 ```
 
@@ -270,21 +270,8 @@ sprocket run -s -c backends.conf/sprocket.prod.toml msi_detection-0.1.0.wdl @par
 
 ## Tasks
 
-In execution order. Tools are wrapped in **modules**, imported by the workflow:
-
-```wdl
-import "module/msisensorpro-1.3.0.wdl" as sensorpro   # tasks scan, pro
-import "module/bedtools-2.31.1.wdl" as bedtools           # task intersect
-```
-
-Module tasks are generic (the tool's own options only), declare their image in
-`requirements.container` and can be reused by other workflows; the pipeline-specific steps are
-tasks of `msi_detection-0.1.0.wdl`, in a generic python3 + awk image (`python_container`,
-`apptainer-recipes/python-3.12.sif`); the python script is given to them as a `File`, not built into the image.
-
 Calls are named after their line on the diagram, `t<line><rank>_<step>`: `ta` BAMs (green),
-`tb` msisensor-pro list (blue, panel steps included), `tc` ROI markers (red). A WDL name can't
-start with a digit, hence the letter; sprocket's `calls/<call>/` folders group the same way.
+`tb` msisensor-pro list (blue, panel steps included), `tc` ROI markers (red). 
 
 | Call (task) | Runs | What it does | Main output |
 |---|---|---|---|
@@ -317,7 +304,6 @@ to `sbatch`). Only `ta02_sensorpro_pro` takes `params.threads`: every other task
 
 | Job | Task / script | CPU | Memory | Set in |
 |---|---|---|---|---|
-| `msi-pick_run`, `msi-experiment`, `msi-pre_process` (cron only) | `msi_detection_pre_p.py` | 1 | 1 GiB | `srun` line of `BASH.sprocket.cron.sh` |
 | `ta01_find_bams` | `find_bams` | 1 | 512 MiB | `msi_detection-0.1.0.wdl` |
 | `tb01_sensorpro_scan` | `sensorpro.scan` | 1 | 4 GiB | `module/msisensorpro-1.3.0.wdl` |
 | `tb02_list_to_bed` | `list_to_bed` | 1 | 2 GiB | `msi_detection-0.1.0.wdl` |
@@ -327,17 +313,12 @@ to `sbatch`). Only `ta02_sensorpro_pro` takes `params.threads`: every other task
 | `tb06_mark_list` | `mark_list` | 1 | 2 GiB | `msi_detection-0.1.0.wdl` |
 | `ta02_sensorpro_pro` × N (one per BAM) | `sensorpro.pro` | `params.threads` (8: `pro -b`) | 4 GiB | CPU: params JSON; memory: `module/msisensorpro-1.3.0.wdl` |
 | `ta03_report` | `report` | 1 | 2 GiB | `msi_detection-0.1.0.wdl` |
-| `msi-index` | `msi_detection_post_p.py index` | 1 | 1 GiB | `srun` line of `BASH.sprocket.cron.sh` / `BASH.sprocket.batch.sh` |
-| `msi-make_configs`, `msi-export_tsv` (batch only, run by hand) | `make_configs.py`, `export_tsv.py` | 1 | 1 GiB | `srun` line of `BASH.make_configs.sh` / `BASH.export_tsv.sh` |
 
-At most `max_concurrency` (50) jobs at once and `[run.workflow.scatter] concurrency` (10) BAMs in
-parallel (`sprocket.prod.toml`): up to 10 × 8 = 80 CPUs and 40 GiB during `ta02_sensorpro_pro`.
 
 ## Inputs
 
 Keys of the params JSON, all prefixed `msi_detection.` (see [`params/template.json`](params/template.json)).
-`inputs`, `references` and `params` are objects (WDL structs); where results go is not a
-params key (see `BASH.sprocket.cron.sh`):
+`inputs`, `references` and `params` are objects (WDL structs); 
 
 ```json
 "msi_detection.inputs":     {"run": "...", "samples": ["E25D04852T", "..."]},
@@ -345,39 +326,41 @@ params key (see `BASH.sprocket.cron.sh`):
 "msi_detection.params":     {"threads": 8, "coverage_threshold": 1, "recursive": true, "p_process": {"min_reads": 200, "pval_cutoff": 0.1, "sample_na_fraction": 0.5, "consensus_roi_cutoff": 3}},
 ```
 
-Optional members can be left out of their object.
 
-| Object / input | Member | Required | Description |
-|---|---|---|---|
-| `inputs` (`InputDirs`) | `run` | yes | Run directory; its name is the `run_id` |
-| | `samples` | no | Sample IDs: only the BAMs whose name contains one of them are analysed (an ID with no BAM fails the run). Without it: every BAM but the controls |
-| `references` (`References`) | `genome` | yes | Fasta the BAMs are aligned on |
-| | `pro_list` | no | Existing scan list: skips the scan |
-| | `bed_panel` | no | Plain panel BED (no `track` line, e.g. `*.amplicons.bed`) |
-| | `bed_roi` | no | MSI markers BED (e.g. `ROI.hg19.bed`) |
-| `params` (`RunParams`) | `threads` | yes | `pro -b` and the CPUs reserved by each `ta02_sensorpro_pro` (only task using it) |
-| | `coverage_threshold` | yes | `pro -c` |
-| | `recursive` | yes | Also look for BAMs in sub-folders (one per library) |
-| | `p_process.min_reads` | yes | Reports: a site counts (% unstable, site status) only with ≥ this many reads (e.g. 200) |
-| | `p_process.pval_cutoff` | yes | Reports: a site is unstable when its p-value is above this (e.g. 0.1) |
-| | `p_process.sample_na_fraction` | yes | Reports: sample status NA when more than this fraction of the loci listed on its sample page are NA or MSU (e.g. 0.5): ROI markers, and sites with a p-value in at least one library (loci without any, e.g. 0 reads everywhere, are left out) |
-| | `p_process.consensus_roi_cutoff` | yes | Reports: sample status MSI when at least this many ROI markers are unstable in consensus, MSS otherwise (e.g. 3) |
-| `msisensorpro_container`, `bedtools_container` | | yes (`params/install.json`) | Image of each tool (see below) |
-| `python_container` | | yes (`params/install.json`) | Generic python3 + awk image of the python/bash tasks |
-| `msi_main_helper` | | yes (`params/install.json`) | Python reference list steps, a `File` |
-| `msi_report_helper` | | yes (`params/install.json`) | Python report step, a `File` |
+| Key | Required | Description |
+|---|---|---|
+| `inputs.run` | yes | Run directory; its name is the `run_id` |
+| `inputs.samples` | no | Sample IDs: only the BAMs whose name contains one of them are analysed (an ID with no BAM fails the run). Without it: every BAM but the controls |
+| `references.genome` | yes | Fasta the BAMs are aligned on |
+| `references.pro_list` | no | Existing scan list: skips the scan |
+| `references.bed_panel` | no | Plain panel BED (no `track` line, e.g. `*.amplicons.bed`) |
+| `references.bed_roi` | no | MSI markers BED (e.g. `ROI.hg19.bed`) |
+| `params.threads` | yes | `pro -b` and the CPUs reserved by each `ta02_sensorpro_pro` (only task using it) |
+| `params.coverage_threshold` | yes | `pro -c` |
+| `params.recursive` | yes | Also look for BAMs in sub-folders (one per library) |
+| `params.p_process.min_reads` | yes | Reports: a site counts (% unstable, site status) only with ≥ this many reads (e.g. 200) |
+| `params.p_process.pval_cutoff` | yes | Reports: a site is unstable when its p-value is above this (e.g. 0.1) |
+| `params.p_process.sample_na_fraction` | yes | Reports: sample status NA when more than this fraction of the loci listed on its sample page are NA or MSU (e.g. 0.5): ROI markers, and sites with a p-value in at least one library (loci without any, e.g. 0 reads everywhere, are left out) |
+| `params.p_process.consensus_roi_cutoff` | yes | Reports: sample status MSI when at least this many ROI markers are unstable in consensus, MSS otherwise (e.g. 3) |
+
 
 The genome, panel and ROI must use the same build as the BAMs (e.g. GRCh37 + `ROI.hg19.bed`).
 
 ## Outputs
 
+Two main folders, `VIZ` and `WORK`:
+
+- `VIZ`: the HTML reports and the all-runs dashboard, the folder to open (described first below);
+- `WORK`: sprocket's runs, with every task's files and logs (tree at the end of this section).
+  The call cache is elsewhere, in `cache_dir` of `backends.conf/sprocket.prod.toml`.
+
 `ta03_report` returns `viz/` as a `Directory` output, in its folder of the sprocket run:
 
 ```text
-<OUT_DIR>/work/sprocket/runs/msi_detection/<timestamp>/calls/ta03_report/attempts/0/work/viz/
+$WORK/sprocket/runs/msi_detection/<timestamp>/calls/ta03_report/attempts/0/work/viz/
 ```
 
-(cron mode: `$WORK/sprocket/runs/...`). `index` then copies its `runs/<run_id>/` to `$VIZ` and
+`index` then copies its `runs/<run_id>/` to `$VIZ` and
 builds the dashboard there:
 
 ```text
@@ -405,25 +388,48 @@ The raw msisensor-pro outputs are not copied: they stay in each `ta02_sensorpro_
 sprocket run (`_all` and `_unstable` listed in `outputs.json`); 
 
 When every call came from the cache, `outputs.json` points to
-the run that computed them, possibly in another `OUT_DIR`:
+the run that computed them, possibly in another `WORK`.
 
-```
-<sprocket run>/calls/ta02_sensorpro_pro-<N>/attempts/0/work/<sample>{,_all,_dis,_unstable}
-<sprocket run>/calls/ta03_report/attempts/0/stderr
+sprocket's work folder, `WORK`:
+
+```text
+$WORK/
+└── sprocket/
+    ├── .lock                                   sprocket's lock
+    ├── sprocket.db                             sprocket's database (runs, index)
+    ├── index/
+    │   └── msi_detection/
+    │       └── Run154_Juno_params/             one folder per params JSON (--index-on)
+    │           ├── outputs.json  -> ../../../runs/msi_detection/<timestamp>/outputs.json
+    │           ├── viz           -> .../calls/ta03_report/attempts/0/work/viz
+    │           ├── NICK_all, NICK_unstable     -> .../calls/ta02_sensorpro_pro-<N>/attempts/0/work/
+    │           └── <genome>.msisensor_pro.panel{.bed,.list,.roi.bed}  -> .../calls/tb05|tb06|tc03_*/attempts/0/work/
+    └── runs/
+        └── msi_detection/
+            ├── _latest -> <last timestamp>
+            └── 2026-10-27_081009457281388/     one folder per sprocket run
+                ├── inputs.json                 resolved inputs
+                ├── outputs.json                workflow outputs
+                ├── output.log                  sprocket's log
+                └── calls/
+                    ├── ta01_find_bams/
+                    ├── tb01_sensorpro_scan/
+                    ├── tb02_list_to_bed/ … tb06_mark_list/
+                    ├── tc01_roi_chrom/ … tc03_roi_correspondence/
+                    ├── ta02_sensorpro_pro-0/ … -<N>/      one per BAM (scatter); <sample>{,_all,_dis,_unstable} in attempts/0/work/
+                    └── ta03_report/
+                        ├── inputs.json, outputs.json
+                        ├── tmp/
+                        └── attempts/0/
+                            ├── command                 script run
+                            ├── stdout, stderr          task output (report log: stderr)
+                            ├── sbatch_command, job_id, slurm.std{out,err}
+                            ├── apptainer_command, apptainer.std{out,err}
+                            └── work/                   working folder: viz/ (+ samples.tsv)
 ```
 
-sprocket's own run directory (with `BASH.sprocket.cron.sh`: `$WORK/sprocket/runs/msi_detection/<timestamp>/`, `_latest` → last run):
-
-```
-output.log        sprocket's log
-inputs.json       resolved inputs
-outputs.json      workflow outputs (also printed by sprocket run)
-calls/<call>/attempts/0/{command,stdout,stderr,work/}   each call (ta01_find_bams, ...)
-```
-
-Workflow outputs (`outputs.json`): `msi_reference_list`, `msi_analysis_list`,
-`panel_correspondence_bed`, `roi_correspondence_bed`, `msisensorpro_all`,
-`msisensorpro_unstable`, `report_viz` (Directory).
+A call taken from the cache has no `attempts/`, only `inputs.json` and `outputs.json`: its results
+are in the run that computed them.
 
 ## Files
 
@@ -462,8 +468,8 @@ standard library and can also be run directly on the host.
 
 ```sh
 ./companion-scripts/BASH.make_configs.sh BAMS_DIR RUNS_FILE OUTPUT_DIR
-./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR OUT_DIR          # in screen / tmux
-./companion-scripts/BASH.export_tsv.sh VIZ_DIR OUTPUT_DIR
+./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR VIZ WORK         # in screen / tmux
+./companion-scripts/BASH.export_tsv.sh VIZ OUTPUT_DIR
 ./companion-scripts/make_msi_locker.py --locker-adivar ADIVAR_JSON --locker-msi MSI_TXT [--dry-run]
 ```
 

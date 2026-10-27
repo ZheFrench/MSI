@@ -1,10 +1,10 @@
 #!/bin/sh
 # Batch mode: runs the workflow on every params JSON of a folder, one after
 # the other (no pre_process, no MSI locker). Cron mode: BASH.sprocket.cron.sh.
-#   ./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR OUT_DIR
-# OUT_DIR (required) gets viz/ (dashboard) and
-# work/ (sprocket runs): one OUT_DIR per group keeps their outputs apart.
-# CONFIG_DIR from BASH.make_configs.sh; results as TSV after: BASH.export_tsv.sh OUT_DIR/viz.
+#   ./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR VIZ WORK
+# VIZ (reports and dashboard) and WORK (sprocket runs), required, as in cron
+# mode; one VIZ per group keeps their dashboards apart.
+# CONFIG_DIR from BASH.make_configs.sh; results as TSV after: BASH.export_tsv.sh VIZ.
 set -eu
 
 WDL_DIR=/media/jp/SSD2/CHU/code/pipeline-jp
@@ -16,10 +16,10 @@ SPROCKET_CONFIG=$WDL_DIR/backends.conf/sprocket.prod.toml
 INSTALL=$WDL_DIR/params/install.json
 
 # Folder of the params JSON to run.
-CONFIGS=${1:?usage: $0 CONFIG_DIR OUT_DIR}
-OUT=${2:?usage: $0 CONFIG_DIR OUT_DIR}
-VIZ=$OUT/viz
-WORK=$OUT/work
+CONFIGS=${1:?usage: $0 CONFIG_DIR VIZ WORK}
+# Absolute (apptainer binds); -m: they may not exist yet.
+VIZ=$(realpath -m "${2:?usage: $0 CONFIG_DIR VIZ WORK}")
+WORK=$(realpath -m "${3:?usage: $0 CONFIG_DIR VIZ WORK}")
 
 mkdir -p "$VIZ" "$WORK"
 
