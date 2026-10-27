@@ -9,7 +9,7 @@ From: python:3.12-slim
     Generic image for the host-side steps of msi_detection: python3 (standard
     library only) for msi_detection_main_p.py and msi_detection_report_p.py,
     given to the tasks as WDL Files (NOT in the image; msi_detection_pre_p.py
-    and msi_detection_post_p.py run in it from scripts/), and awk/find/sort for the bash
+    and msi_detection_post_p.py run in it from main-scripts/), and awk/find/sort for the bash
     tasks. No pipeline code here: changing the script needs no rebuild.
 
     Usage:

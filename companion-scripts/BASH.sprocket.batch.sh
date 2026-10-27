@@ -1,9 +1,10 @@
 #!/bin/sh
 # Batch mode: runs the workflow on every params JSON of a folder, one after
 # the other (no pre_process, no MSI locker). Cron mode: BASH.sprocket.cron.sh.
-#   ./BASH.sprocket.batch.sh CONFIG_DIR OUT_DIR
+#   ./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR OUT_DIR
 # OUT_DIR (required) gets viz/ (dashboard) and
 # work/ (sprocket runs): one OUT_DIR per group keeps their outputs apart.
+# CONFIG_DIR from BASH.make_configs.sh; results as TSV after: BASH.export_tsv.sh OUT_DIR/viz.
 set -eu
 
 WDL_DIR=/media/jp/SSD2/CHU/code/pipeline-jp
@@ -27,14 +28,14 @@ ro() {
 	echo "$1:$1:ro"
 }
 
-# Script $3 of scripts/ as a Slurm job (srun, job msi-$1) in the python image,
+# Script $3 of main-scripts/ as a Slurm job (srun, job msi-$1) in the python image,
 # which sees $WDL_DIR (read-only) and the binds $2.
 python_slurm_job() {
 	name=$1; binds=$2; script=$3; shift 3
 	srun --partition=prod --ntasks=1 --cpus-per-task=1 --mem=1G --job-name="msi-$name" \
 		apptainer exec --bind "$(ro "$WDL_DIR"),$binds" \
 		"$WDL_DIR/apptainer-recipes/python-3.12.sif" \
-		python3 "$WDL_DIR/scripts/$script" "$@"
+		python3 "$WDL_DIR/main-scripts/$script" "$@"
 }
 
 # post_p subcommand $2 (job msi-<subcommand>), with the binds $1.

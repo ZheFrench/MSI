@@ -30,14 +30,14 @@ ro() {
 	echo "$1:$1:ro"
 }
 
-# Script $3 of scripts/ as a Slurm job (srun, job msi-$1) in the python image,
+# Script $3 of main-scripts/ as a Slurm job (srun, job msi-$1) in the python image,
 # which sees $WDL_DIR (read-only) and the binds $2.
 python_slurm_job() {
 	name=$1; binds=$2; script=$3; shift 3
 	srun --partition=prod --ntasks=1 --cpus-per-task=1 --mem=1G --job-name="msi-$name" \
 		apptainer exec --bind "$(ro "$WDL_DIR"),$binds" \
 		"$WDL_DIR/apptainer-recipes/python-3.12.sif" \
-		python3 "$WDL_DIR/scripts/$script" "$@"
+		python3 "$WDL_DIR/main-scripts/$script" "$@"
 }
 
 # post_p subcommand $2 (job msi-<subcommand>), with the binds $1.

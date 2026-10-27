@@ -43,7 +43,7 @@ system): the containers mount them at the same path.
 | `LOCKER_MSI` | `/media/jp/SSD2/CHU/config/locker/msi-sensor.locker.txt` | MSI locker (runs already taken), created if missing |
 | `srun` in `python_slurm_job` | `--partition=prod --cpus-per-task=1 --mem=1G` | Slurm job of the python steps (`pick_run`, `experiment`, `pre_process`, `index`) |
 
-**`BASH.sprocket.batch.sh`** (batch mode): `WDL_DIR` and the same `srun` line (its output folder
+**`companion-scripts/BASH.sprocket.batch.sh`** (batch mode): `WDL_DIR` and the same `srun` line (its output folder
 `OUT_DIR`, which gets `viz/` and `work/`, is a required argument).
 
 **`backends.conf/sprocket.prod.toml`**
@@ -75,8 +75,8 @@ Forgetting it stops sprocket before anything runs (`missing required input`).
 | `msi_detection.msisensorpro_container` | `file:///media/jp/SSD2/CHU/code/pipeline-jp/apptainer-recipes/msisensor-pro-1.3.0.sif` |
 | `msi_detection.bedtools_container` | `file:///media/jp/SSD2/CHU/code/pipeline-jp/apptainer-recipes/bedtools-2.31.1.sif` |
 | `msi_detection.helper_container` | `file:///media/jp/SSD2/CHU/code/pipeline-jp/apptainer-recipes/python-3.12.sif` |
-| `msi_detection.msi_main_helper` | `/media/jp/SSD2/CHU/code/pipeline-jp/scripts/msi_detection_main_p.py` |
-| `msi_detection.msi_report_helper` | `/media/jp/SSD2/CHU/code/pipeline-jp/scripts/msi_detection_report_p.py` |
+| `msi_detection.msi_main_helper` | `/media/jp/SSD2/CHU/code/pipeline-jp/main-scripts/msi_detection_main_p.py` |
+| `msi_detection.msi_report_helper` | `/media/jp/SSD2/CHU/code/pipeline-jp/main-scripts/msi_detection_report_p.py` |
 
 The images of the scripts' own Slurm jobs follow `WDL_DIR`: `$WDL_DIR/apptainer-recipes/python-3.12.sif`
 (`python_slurm_job` of `BASH.sprocket.cron.sh` / `BASH.sprocket.batch.sh`: pick_run, experiment,
@@ -93,8 +93,11 @@ pre_process, index) and `$WDL_DIR/apptainer-recipes/sprocket-doc-0.31.0.sif` (`B
 ```sh
 cd /media/jp/SSD2/CHU/code/pipeline-jp
 ./BASH.sprocket.cron.sh                       # cron mode: pre_process picks the run left to analyse, then runs it
-./BASH.sprocket.batch.sh CONFIG_DIR OUT_DIR   # batch mode: every params JSON of CONFIG_DIR, outputs in OUT_DIR
+./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR OUT_DIR   # batch mode: every params JSON of CONFIG_DIR, outputs in OUT_DIR
 ```
+
+The batch mode runs `sprocket` in the current shell (hours for a whole group): launch it in
+`screen` / `tmux`, or a lost terminal / SSH session stops it. Not needed for the cron mode (no terminal).
 
 `BASH.sprocket.cron.sh` (cron) first runs `msi_detection_pre_p.py` three times, each container
 mounting only what that step reads:
@@ -125,6 +128,52 @@ changes with each run, so it is built after the run (`index`), not by a task (a 
 current reports would not be reproducible nor cacheable). `index` can be re-run at any time, e.g.
 after deleting a run folder. Everything else stays in sprocket's run folder (paths in its
 `outputs.json`), every task keeping its `work/` folder (~300 MB per run).
+
+### Batch mode: params JSON and TSV export
+
+The params JSON of a batch come from `companion-scripts/make_configs.py`: given a group folder of
+BAM folders (one per run: `input/colon-msi`, `input/foie-mss`...) and run names, on the command line
+and/or in a text file, it writes `<run>_params.json` (copy of `params/template.json`,
+`run` = `<group folder>/<run>`) in `--output-dir` (required: the launcher's `OUTPUT_DIR`). The
+group folder picks the run, the same run name being in several groups.
+
+The runs file has one line per run, or per run + sample ID to analyse only some samples
+(columns separated by tabs or spaces, `#` comments allowed):
+
+```
+Run154_Juno                  # every BAM of the run (but the controls)
+Run171_Juno  C22D03556T      # only these samples of Run171_Juno
+Run171_Juno  C22D03587T
+```
+
+The sample IDs of a run go to `"msi_detection.inputs".samples`: `ta01_find_bams` then only keeps the
+BAMs whose name contains one of them (every library). A run without BAM, or with a sample ID
+matching no BAM of the run (checked before the workflow), gets no params JSON: its lines are written
+in `<output-dir>/failed-runs.txt` (same format as the runs file, for a rerun; removed when no run
+fails) and the script exits 1, the other runs being written.
+
+After the batch, `companion-scripts/export_tsv.py` writes the results of its reports folder as a
+TSV, one line per sample: `results_msi_<date>.tsv` (date `YYYY-MM-DD_HH-MM-SS`: each export is a new file), in the launcher's `OUTPUT_DIR` (required), in the reports folder with the python script alone (`--output-dir`). It recomputes nothing: it reads
+the dashboard data (`index_msi_sample.js`, then each sample's `runs/<run_id>/<sample>_index_sample.js`),
+so the table matches the dashboard. Columns: `run_id`, `sample_name`, `call`, `consensus_roi`,
+`consensus_total`, `pct_region_unstable`; per library `<lib>_unstable_region_count`,
+`<lib>_unstable_roi_count`; per ROI marker `<marker>` (its site status, the same for every library),
+then `<lib>_<marker>_pro_p` and `<lib>_<marker>_cov` for each library (no mean). Empty cell: no value.
+
+Both run through a launcher, like the other python steps: a Slurm job (`srun`, jobs
+`msi-make_configs` / `msi-export_tsv`) in `python-3.12.sif` (`python3 -I`), mounting the code
+read-only, what the script reads (read-only) and the folder it writes:
+
+```sh
+S=/media/jp/SSD2/CHU
+./companion-scripts/BASH.make_configs.sh $S/input/foie-mss $S/config/runs-test.txt $S/config/config-test
+./companion-scripts/BASH.sprocket.batch.sh $S/config/config-test $S/output/config-test
+./companion-scripts/BASH.export_tsv.sh $S/output/config-test/viz $S/output/config-test      # -> $S/output/config-test/results_msi_<date>.tsv
+```
+
+The python scripts can also be run directly on the host (only the standard library):
+`make_configs.py BAMS_DIR [RUN ...] [--runs-file TXT] --output-dir DIR`,
+`export_tsv.py --viz VIZ_DIR [--output-dir DIR | --output TSV]`.
 
 Run by hand, with a params JSON written by `pre_process` (or a filled copy of `params/template.json`):
 
@@ -164,14 +213,14 @@ start with a digit, hence the letter; sprocket's `calls/<call>/` folders group t
 | `ta03_report` (`report`) | python image | Gets every BAM's results as `File`s, copies them to `data/<run_id>/<library>/`, builds this run's reports in `viz/runs/<run_id>/` (run page, sample pages; the all-runs dashboard is built by `index` after the run) and writes the log; writes nothing outside its task. | `viz/`, `data/`, `log/` (`Directory`) |
 
 The python steps of the workflow are subcommands of two self-contained scripts (a WDL task gets
-its script alone): [`scripts/msi_detection_main_p.py`](scripts/msi_detection_main_p.py)
+its script alone): [`main-scripts/msi_detection_main_p.py`](main-scripts/msi_detection_main_p.py)
 (`msi_main_helper`: `list-to-bed`, `mark-list`, the reference list) and
-[`scripts/msi_detection_report_p.py`](scripts/msi_detection_report_p.py) (`msi_report_helper`:
+[`main-scripts/msi_detection_report_p.py`](main-scripts/msi_detection_report_p.py) (`msi_report_helper`:
 `report`). They are kept apart because sprocket's call cache keys on each task's input files:
 editing the report must not invalidate the list steps, whose outputs are whole-genome lists
-(~100 MB each). [`scripts/msi_detection_post_p.py`](scripts/msi_detection_post_p.py) only holds
+(~100 MB each). [`main-scripts/msi_detection_post_p.py`](main-scripts/msi_detection_post_p.py) only holds
 `index`, run after the workflow by the BASH scripts; it imports the page code (CSS, `<head>`,
-`.js` writer) of `msi_detection_report_p.py`, next to it in `scripts/`.
+`.js` writer) of `msi_detection_report_p.py`, next to it in `main-scripts/`.
 
 ### Resources
 
@@ -192,6 +241,7 @@ to `sbatch`). Only `ta02_sensorpro_pro` takes `params.threads`: every other task
 | `ta02_sensorpro_pro` × N (one per BAM) | `msisensorpro.pro` | `params.threads` (8: `pro -b`) | 4 GiB | CPU: params JSON; memory: `module/msisensorpro-1.3.0.wdl` |
 | `ta03_report` | `report` | 1 | 2 GiB | `msi_detection-0.1.0.wdl` |
 | `msi-index` | `msi_detection_post_p.py index` | 1 | 1 GiB | `srun` line of `BASH.sprocket.cron.sh` / `BASH.sprocket.batch.sh` |
+| `msi-make_configs`, `msi-export_tsv` (batch only, run by hand) | `make_configs.py`, `export_tsv.py` | 1 | 1 GiB | `srun` line of `BASH.make_configs.sh` / `BASH.export_tsv.sh` |
 
 At most `max_concurrency` (50) jobs at once and `[run.workflow.scatter] concurrency` (10) BAMs in
 parallel (`sprocket.prod.toml`): up to 10 × 8 = 80 CPUs and 40 GiB during `ta02_sensorpro_pro`.
@@ -297,16 +347,18 @@ written by `index`, after the run.
 |---|---|
 | `msi_detection-0.1.0.wdl` | The workflow |
 | `module/msisensorpro-1.3.0.wdl`, `module/bedtools-2.31.1.wdl` | Tool modules (tasks `scan`, `pro`; `intersect`) |
-| `scripts/msi_detection_pre_p.py` | Before the workflow: params JSON of the runs left to analyse (run by `BASH.sprocket.cron.sh`) |
-| `scripts/msi_detection_main_p.py` | Reference list steps of the workflow (`msi_main_helper`) |
-| `scripts/msi_detection_report_p.py` | Report step of the workflow (`msi_report_helper`): this run's pages (page icon embedded) |
-| `scripts/msi_detection_post_p.py` | After the workflow: `index`, the all-runs dashboard (run by `BASH.sprocket.cron.sh` / `BASH.sprocket.batch.sh`) |
+| `main-scripts/msi_detection_pre_p.py` | Before the workflow: params JSON of the runs left to analyse (run by `BASH.sprocket.cron.sh`) |
+| `main-scripts/msi_detection_main_p.py` | Reference list steps of the workflow (`msi_main_helper`) |
+| `main-scripts/msi_detection_report_p.py` | Report step of the workflow (`msi_report_helper`): this run's pages (page icon embedded) |
+| `main-scripts/msi_detection_post_p.py` | After the workflow: `index`, the all-runs dashboard (run by `BASH.sprocket.cron.sh` / `BASH.sprocket.batch.sh`) |
 | `apptainer-recipes/python-3.12.def` | Generic python3 + awk image of the python/bash tasks |
 | `params/containers.json` | Images and python helpers of the workflow (passed to every `sprocket run`) |
 | `params/template.json` | Params JSON template (GRCh37, Juno v3 panel, ROI hg19): `pre_process` fills `run` per run |
 | `backends.conf/sprocket.prod.toml` | sprocket config: Slurm + Apptainer |
 | `backends.conf/slurm-local/` | Single-node Slurm of this workstation (`sudo ./install.sh`) |
-| `BASH.sprocket.cron.sh`, `BASH.sprocket.batch.sh` | `sprocket run` with this folder's config: cron mode (run found by pre_process) / batch mode (folder of params JSON) |
+| `BASH.sprocket.cron.sh`, `companion-scripts/BASH.sprocket.batch.sh` | `sprocket run` with this folder's config: cron mode (run found by pre_process) / batch mode (folder of params JSON) |
+| `companion-scripts/make_configs.py`, `BASH.make_configs.sh` | Batch mode, before: `<run>_params.json` of the given runs of a BAM group folder (`failed-runs.txt`: runs without BAM); its Slurm/Apptainer launcher |
+| `companion-scripts/export_tsv.py`, `BASH.export_tsv.sh` | Batch mode, after: results of a reports folder as a TSV, one line per sample; its Slurm/Apptainer launcher |
 | `BASH.doc.sh`, `apptainer-recipes/sprocket-doc-0.31.0.def` | HTML documentation (`docs/`, generated) and its image |
 | `diagram/msi_detection_metromap.drawio` / `.preview.png`, `diagram/BASH.render_png.sh` | Workflow diagram, its PNG export |
 

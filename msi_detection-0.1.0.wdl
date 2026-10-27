@@ -297,8 +297,8 @@ workflow msi_detection {
 		bedtools_container: "bedtools image [params/containers.json: apptainer-recipes/bedtools-2.31.1.sif]; file:///...sif on slurm_apptainer."
 		helper_container: "Generic python3 + awk image of the python/bash tasks [params/containers.json: apptainer-recipes/python-3.12.sif]; the script is not in it."
 		exclude_prefixes: "BAMs whose name starts with one of these are not analysed (controls) [default: TN, TPH]."
-		msi_main_helper: "msi_detection_main_p.py, given to list_to_bed and mark_list as a File [params/containers.json: scripts/msi_detection_main_p.py]."
-		msi_report_helper: "msi_detection_report_p.py, given to the report task as a File [params/containers.json: scripts/msi_detection_report_p.py]."
+		msi_main_helper: "msi_detection_main_p.py, given to list_to_bed and mark_list as a File [params/containers.json: main-scripts/msi_detection_main_p.py]."
+		msi_report_helper: "msi_detection_report_p.py, given to the report task as a File [params/containers.json: main-scripts/msi_detection_report_p.py]."
 	}
 }
 
