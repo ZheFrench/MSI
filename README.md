@@ -61,8 +61,8 @@ Cron mode, e.g. every 4 hours on Thursdays and Fridays:
 
 
 ## Contents
-- [Introduction](#Introduction)
-- [Before the first cron launch](#Before-the-first-cron-launch)
+- [Introduction](#introduction)
+- [Before the first cron launch](#before-the-first-cron-launch)
 - [Configuration](#configuration)
 - [Quick start](#quick-start)
   - [Batch mode: params JSON and TSV export](#batch-mode-params-json-and-tsv-export)
@@ -71,15 +71,16 @@ Cron mode, e.g. every 4 hours on Thursdays and Fridays:
 - [Inputs](#inputs)
 - [Outputs](#outputs)
 - [Files](#files)
+- [Companion scripts](#companion-scripts)
 
 ## Before the first cron launch
 
-In order the cron does not analyse every past run, fill the MSI locker
+So that the cron does not analyse every past run, fill the MSI locker
 with the runs ADIVAR has already finished.
 
 ```sh
 # same lockers as LOCKER_ADIVAR / LOCKER_MSI of BASH.sprocket.cron.sh
-L=/media/jp/SSD2/CHU/config/locker
+L=/path/to/locker
 ./companion-scripts/make_msi_locker.py --locker-adivar $L/adivar-testNS.json --locker-msi $L/msi-sensor.locker.txt --dry-run   # prints the runs to add
 ./companion-scripts/make_msi_locker.py --locker-adivar $L/adivar-testNS.json --locker-msi $L/msi-sensor.locker.txt
 ```
@@ -108,38 +109,24 @@ chr13	31722591	31722667	HT17	0	+
 chr14	23652317	23652397	NR21	0	+
 ```
 
-Set up the workflow's custom thresholds in the same file (`msi_detection.params`, each key described
-in [Inputs](#inputs)):
+Set the workflow's thresholds in the same file, under `msi_detection.params` (current values in
+[`params/template.json`](params/template.json), each key described in [Inputs](#inputs)).
 
-```json
-"msi_detection.params": {
-    "threads": 8,
-    "coverage_threshold": 0,
-    "recursive": true,
-    "p_process": {
-        "min_reads": 200,
-        "pval_cutoff": 0.1,
-        "sample_na_fraction": 0.5,
-        "consensus_roi_cutoff": 3
-    }
-}
-```
-
-`params/install.json`: paths of the Apptainer images and Python scripts the WDL workflow uses
+[`params/install.json`](params/install.json): paths of the Apptainer images and Python scripts the WDL workflow uses
 (details below).
 
 **`BASH.sprocket.cron.sh`** (cron mode)
 
-| Variable / line | Value | Role |
-|---|---|---|
-| `WDL_DIR` | `/media/jp/SSD2/CHU/code/pipeline-jp` | this folder |
-| `VIZ` | `/media/jp/SSD2/CHU/test/viz` | reports and dashboard (written by `index`) |
-| `WORK` | `/media/jp/SSD2/CHU/test/work` | sprocket's runs (`sprocket/`) and the params JSON (`config/`) |
-| `RUNS_DIR` | `/media/jp/SSD2/CHU/input/fake-data/runs` | one folder per sequencing run, with its `SampleSheet.csv` |
-| `BAMS_DIR` | `/media/jp/SSD2/CHU/input/fake-data/fake_bam` | one BAM folder per Experiment Name |
-| `LOCKER_ADIVAR` | `/media/jp/SSD2/CHU/config/locker/adivar-testNS.json` | ADIVAR's locker (read only) |
-| `LOCKER_MSI` | `/media/jp/SSD2/CHU/config/locker/msi-sensor.locker.txt` | MSI locker (runs already taken), created if missing |
-| `srun` in `python_slurm_job` | `--partition=prod --cpus-per-task=1 --mem=1G` | Slurm job of the python steps (`pick_run`, `experiment`, `pre_process`, `index`) |
+| Variable | Role |
+|---|---|
+| `WDL_DIR` | this folder |
+| `VIZ` | reports and dashboard (written by `index`) |
+| `WORK` | sprocket's runs (`sprocket/`) and the params JSON (`config/`) |
+| `RUNS_DIR` | one folder per sequencing run, with its `SampleSheet.csv` |
+| `BAMS_DIR` | one BAM folder per Experiment Name |
+| `LOCKER_ADIVAR` | ADIVAR's locker (read only) |
+| `LOCKER_MSI` | MSI locker (runs already taken), created if missing |
+
 
 **`companion-scripts/BASH.sprocket.batch.sh`** (batch mode): `WDL_DIR` and the same `srun` line (its output folder
 `OUT_DIR`, which gets `viz/` and `work/`, is a required argument).
@@ -149,18 +136,18 @@ in [Inputs](#inputs)):
 | Key | Value | Role |
 |---|---|---|
 | `[run.backends.slurm.sbatch] args` | `["--partition=prod"]` | partition (and any other `sbatch` option) of the tasks |
-| `[run.task] cache_dir` | `/media/jp/SSD2/CHU/test/work/sprocket_cache` | sprocket's call cache (shared by all the runs) |
+| `[run.task] cache_dir` | a folder | sprocket's call cache (shared by all the runs) |
 | `[run.backends.slurm] interval` | `5` | seconds between two `sacct` polls: short for local tests, raise it on the cluster |
 | `max_concurrency`, `[run.workflow.scatter] concurrency` | `50`, `10` | jobs submitted at once, scatter elements in parallel |
 
 **`params/template.json`** (copied by `pre_process` for each run; `run` and `samples` stay empty, filled per run)
 
-| Key | Value |
+| Key | Role |
 |---|---|
-| `msi_detection.references.genome` | `/media/jp/SSD2/CHU/refData/hg19/Homo_sapiens.GRCh37.75.wout_contigs.fa` |
-| `msi_detection.references.bed_panel` | `/media/jp/SSD2/CHU/refData/MSI/static/Panel_Juno_v3_Juno.amplicons.bed` |
-| `msi_detection.references.bed_roi` | `/media/jp/SSD2/CHU/refData/MSI/static/ROI.hg19.bed` |
-| `msi_detection.params` | `threads` (8, CPUs of each `msisensor-pro pro` only), `coverage_threshold`, `p_process` thresholds |
+| `msi_detection.references.genome` | reference FASTA (e.g. GRCh37) |
+| `msi_detection.references.bed_panel` | BED of the sequencing panel |
+| `msi_detection.references.bed_roi` | BED of the ROI markers |
+| `msi_detection.params` | `threads` (CPUs of each `msisensor-pro pro` only), `coverage_threshold`, `p_process` thresholds |
 
 **`params/install.json`**: what depends on the installation, not on the run: the workflow's
 images and python helpers (scripts given to the tasks as `File`, not built into the image), the
@@ -169,13 +156,13 @@ scripts pass this file before each run's params JSON (`sprocket run ... @install
 for a key in both, the last file wins, so a params JSON can still override an image for its run).
 Forgetting it stops sprocket before anything runs (`missing required input`).
 
-| Key | Value |
+| Key | Points to |
 |---|---|
-| `msi_detection.msisensorpro_container` | `file:///media/jp/SSD2/CHU/code/pipeline-jp/apptainer-recipes/msisensor-pro-1.3.0.sif` |
-| `msi_detection.bedtools_container` | `file:///media/jp/SSD2/CHU/code/pipeline-jp/apptainer-recipes/bedtools-2.31.1.sif` |
-| `msi_detection.python_container` | `file:///media/jp/SSD2/CHU/code/pipeline-jp/apptainer-recipes/python-3.12.sif` |
-| `msi_detection.msi_main_helper` | `/media/jp/SSD2/CHU/code/pipeline-jp/main-scripts/msi_detection_main_p.py` |
-| `msi_detection.msi_report_helper` | `/media/jp/SSD2/CHU/code/pipeline-jp/main-scripts/msi_detection_report_p.py` |
+| `msi_detection.msisensorpro_container` | `apptainer-recipes/msisensor-pro-1.3.0.sif` |
+| `msi_detection.bedtools_container` | `apptainer-recipes/bedtools-2.31.1.sif` |
+| `msi_detection.python_container` | `apptainer-recipes/python-3.12.sif` |
+| `msi_detection.msi_main_helper` | `main-scripts/msi_detection_main_p.py` |
+| `msi_detection.msi_report_helper` | `main-scripts/msi_detection_report_p.py` |
 
 The images of the scripts' own Slurm jobs follow `WDL_DIR`: `$WDL_DIR/apptainer-recipes/python-3.12.sif`
 (`python_slurm_job` of `BASH.sprocket.cron.sh` / `BASH.sprocket.batch.sh`: pick_run, experiment,
@@ -184,14 +171,14 @@ pre_process, index) and `$WDL_DIR/apptainer-recipes/sprocket-doc-0.31.0.sif` (`B
 **crontab** (not in this folder), for example every 30 min with a log:
 
 ```sh
-*/30 * * * * /media/jp/SSD2/CHU/code/pipeline-jp/BASH.sprocket.cron.sh >> /media/jp/SSD2/CHU/test/cron.log 2>&1
+*/30 * * * * /path/to/pipeline-jp/BASH.sprocket.cron.sh >> /path/to/cron.log 2>&1
 ```
 
 
 ## Quick start
 
 ```sh
-cd /media/jp/SSD2/CHU/code/pipeline-jp
+cd /path/to/pipeline-jp
 ./BASH.sprocket.cron.sh                       # cron mode: pre_process picks the run left to analyse, then runs it
 ./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR OUT_DIR   # batch mode: every params JSON of CONFIG_DIR, outputs in OUT_DIR
 ```
@@ -265,7 +252,7 @@ Both run through a launcher, like the other python steps: a Slurm job (`srun`, j
 read-only, what the script reads (read-only) and the folder it writes:
 
 ```sh
-S=/media/jp/SSD2/CHU
+S=/path/to/data
 ./companion-scripts/BASH.make_configs.sh $S/input/foie-mss $S/config/runs-test.txt $S/config/config-test
 ./companion-scripts/BASH.sprocket.batch.sh $S/config/config-test $S/output/config-test
 ./companion-scripts/BASH.export_tsv.sh $S/output/config-test/viz $S/output/config-test      # -> $S/output/config-test/results_msi_<date>.tsv
@@ -460,4 +447,25 @@ Workflow outputs (`outputs.json`): `msi_reference_list`, `msi_analysis_list`,
 | `BASH.doc.sh`, `apptainer-recipes/sprocket-doc-0.31.0.def` | HTML documentation (`docs/`, generated) and its image |
 | `diagram/msi_detection_metromap.drawio` / `.preview.png`, `diagram/BASH.render_png.sh` | Workflow diagram, its PNG export |
 
+## Companion scripts
 
+Helper scripts around the workflow, in `companion-scripts/`. The `BASH.*.sh` launchers run their
+python script as a Slurm job (`srun`) in `python-3.12.sif`; the python scripts only need the
+standard library and can also be run directly on the host.
+
+| Script | Mode | What it does |
+|---|---|---|
+| [`BASH.make_configs.sh`](companion-scripts/BASH.make_configs.sh) → [`make_configs.py`](companion-scripts/make_configs.py) | batch, before | Writes one `<run>_params.json` per run of a runs file (optionally restricted to some samples); runs without BAM go to `failed-runs.txt` |
+| [`BASH.sprocket.batch.sh`](companion-scripts/BASH.sprocket.batch.sh) | batch | Runs the workflow on every params JSON of a folder, then rebuilds the dashboard |
+| [`BASH.export_tsv.sh`](companion-scripts/BASH.export_tsv.sh) → [`export_tsv.py`](companion-scripts/export_tsv.py) | batch, after | Exports a reports folder as a TSV, one line per sample (`results_msi_<date>.tsv`) |
+| [`make_msi_locker.py`](companion-scripts/make_msi_locker.py) | cron, before the first launch | Adds every run already finished by ADIVAR to the MSI locker |
+
+```sh
+./companion-scripts/BASH.make_configs.sh BAMS_DIR RUNS_FILE OUTPUT_DIR
+./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR OUT_DIR          # in screen / tmux
+./companion-scripts/BASH.export_tsv.sh VIZ_DIR OUTPUT_DIR
+./companion-scripts/make_msi_locker.py --locker-adivar ADIVAR_JSON --locker-msi MSI_TXT [--dry-run]
+```
+
+Details: [Batch mode](#batch-mode-params-json-and-tsv-export) (runs file format, TSV columns) and
+[Before the first cron launch](#before-the-first-cron-launch).

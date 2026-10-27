@@ -134,8 +134,8 @@ differs between the two lockers: with more, it stops with an error and analyses 
 <p><a href="diagram/msi_detection_metromap.preview.png" rel="noopener noreferrer"><img src="diagram/msi_detection_metromap.preview.png" alt="msi_detection metro map"></a></p>
 <h2>Contents</h2>
 <ul>
-<li><a href="#Introduction" rel="noopener noreferrer">Introduction</a></li>
-<li><a href="#Before-the-first-cron-launch" rel="noopener noreferrer">Before the first cron launch</a></li>
+<li><a href="#introduction" rel="noopener noreferrer">Introduction</a></li>
+<li><a href="#before-the-first-cron-launch" rel="noopener noreferrer">Before the first cron launch</a></li>
 <li><a href="#configuration" rel="noopener noreferrer">Configuration</a></li>
 <li><a href="#quick-start" rel="noopener noreferrer">Quick start</a>
 <ul>
@@ -150,12 +150,13 @@ differs between the two lockers: with more, it stops with an error and analyses 
 <li><a href="#inputs" rel="noopener noreferrer">Inputs</a></li>
 <li><a href="#outputs" rel="noopener noreferrer">Outputs</a></li>
 <li><a href="#files" rel="noopener noreferrer">Files</a></li>
+<li><a href="#companion-scripts" rel="noopener noreferrer">Companion scripts</a></li>
 </ul>
 <h2>Before the first cron launch</h2>
-<p>In order the cron does not analyse every past run, fill the MSI locker
+<p>So that the cron does not analyse every past run, fill the MSI locker
 with the runs ADIVAR has already finished.</p>
 <pre><code class="language-sh"># same lockers as LOCKER_ADIVAR / LOCKER_MSI of BASH.sprocket.cron.sh
-L=/media/jp/SSD2/CHU/config/locker
+L=/path/to/locker
 ./companion-scripts/make_msi_locker.py --locker-adivar $L/adivar-testNS.json --locker-msi $L/msi-sensor.locker.txt --dry-run   # prints the runs to add
 ./companion-scripts/make_msi_locker.py --locker-adivar $L/adivar-testNS.json --locker-msi $L/msi-sensor.locker.txt
 </code></pre>
@@ -166,8 +167,7 @@ L=/media/jp/SSD2/CHU/config/locker
 <li><code>params/install.json</code>: Apptainer images and Python scripts</li>
 <li><code>backends.conf/sprocket.prod.toml</code>: sprocket and Slurm settings</li>
 <li><code>BASH.sprocket.cron.sh</code>: folders and lockers of the cron mode</li>
-<li>finally, the crontab, to launch <code>BASH.sprocket.cron.sh</code> (example in the
-<a href="#introduction" rel="noopener noreferrer">Introduction</a>)</li>
+<li>finally, edit the crontab, to launch <code>BASH.sprocket.cron.sh</code></li>
 </ul>
 <p><code>params/template.json</code>: (copied by <code>pre_process</code> for each run; <code>run</code> and <code>samples</code> stay empty, filled per run). Define a FASTA genome (<code>genome</code>), a BED of your panel (<code>bed_panel</code>) and a
 BED of the ROI markers (<code>bed_roi</code>), the marker name in the 4th column (custom naming), e.g.
@@ -180,48 +180,35 @@ chr11	125490736	125490816	NR22	0	+
 chr13	31722591	31722667	HT17	0	+
 chr14	23652317	23652397	NR21	0	+
 </code></pre>
-<p>Set up the workflow's custom thresholds in the same file (<code>msi_detection.params</code>, each key described
-in <a href="#inputs" rel="noopener noreferrer">Inputs</a>):</p>
-<pre><code class="language-json">"msi_detection.params": {
-    "threads": 8,
-    "coverage_threshold": 0,
-    "recursive": true,
-    "p_process": {
-        "min_reads": 200,
-        "pval_cutoff": 0.1,
-        "sample_na_fraction": 0.5,
-        "consensus_roi_cutoff": 3
-    }
-}
-</code></pre>
-<p><code>params/install.json</code>: paths of the Apptainer images and Python scripts the WDL workflow uses
+<p>Set the workflow's thresholds in the same file, under <code>msi_detection.params</code> (current values in
+<a href="params/template.json" rel="noopener noreferrer"><code>params/template.json</code></a>, each key described in <a href="#inputs" rel="noopener noreferrer">Inputs</a>).</p>
+<p><a href="params/install.json" rel="noopener noreferrer"><code>params/install.json</code></a>: paths of the Apptainer images and Python scripts the WDL workflow uses
 (details below).</p>
 <p><strong><code>BASH.sprocket.cron.sh</code></strong> (cron mode)</p>
-<table><thead><tr><th>Variable / line</th><th>Value</th><th>Role</th></tr></thead><tbody>
-<tr><td><code>WDL_DIR</code></td><td><code>/media/jp/SSD2/CHU/code/pipeline-jp</code></td><td>this folder</td></tr>
-<tr><td><code>VIZ</code></td><td><code>/media/jp/SSD2/CHU/test/viz</code></td><td>reports and dashboard (written by <code>index</code>)</td></tr>
-<tr><td><code>WORK</code></td><td><code>/media/jp/SSD2/CHU/test/work</code></td><td>sprocket's runs (<code>sprocket/</code>) and the params JSON (<code>config/</code>)</td></tr>
-<tr><td><code>RUNS_DIR</code></td><td><code>/media/jp/SSD2/CHU/input/fake-data/runs</code></td><td>one folder per sequencing run, with its <code>SampleSheet.csv</code></td></tr>
-<tr><td><code>BAMS_DIR</code></td><td><code>/media/jp/SSD2/CHU/input/fake-data/fake_bam</code></td><td>one BAM folder per Experiment Name</td></tr>
-<tr><td><code>LOCKER_ADIVAR</code></td><td><code>/media/jp/SSD2/CHU/config/locker/adivar-testNS.json</code></td><td>ADIVAR's locker (read only)</td></tr>
-<tr><td><code>LOCKER_MSI</code></td><td><code>/media/jp/SSD2/CHU/config/locker/msi-sensor.locker.txt</code></td><td>MSI locker (runs already taken), created if missing</td></tr>
-<tr><td><code>srun</code> in <code>python_slurm_job</code></td><td><code>--partition=prod --cpus-per-task=1 --mem=1G</code></td><td>Slurm job of the python steps (<code>pick_run</code>, <code>experiment</code>, <code>pre_process</code>, <code>index</code>)</td></tr>
+<table><thead><tr><th>Variable</th><th>Role</th></tr></thead><tbody>
+<tr><td><code>WDL_DIR</code></td><td>this folder</td></tr>
+<tr><td><code>VIZ</code></td><td>reports and dashboard (written by <code>index</code>)</td></tr>
+<tr><td><code>WORK</code></td><td>sprocket's runs (<code>sprocket/</code>) and the params JSON (<code>config/</code>)</td></tr>
+<tr><td><code>RUNS_DIR</code></td><td>one folder per sequencing run, with its <code>SampleSheet.csv</code></td></tr>
+<tr><td><code>BAMS_DIR</code></td><td>one BAM folder per Experiment Name</td></tr>
+<tr><td><code>LOCKER_ADIVAR</code></td><td>ADIVAR's locker (read only)</td></tr>
+<tr><td><code>LOCKER_MSI</code></td><td>MSI locker (runs already taken), created if missing</td></tr>
 </tbody></table>
 <p><strong><code>companion-scripts/BASH.sprocket.batch.sh</code></strong> (batch mode): <code>WDL_DIR</code> and the same <code>srun</code> line (its output folder
 <code>OUT_DIR</code>, which gets <code>viz/</code> and <code>work/</code>, is a required argument).</p>
 <p><strong><code>backends.conf/sprocket.prod.toml</code></strong></p>
 <table><thead><tr><th>Key</th><th>Value</th><th>Role</th></tr></thead><tbody>
 <tr><td><code>[run.backends.slurm.sbatch] args</code></td><td><code>["--partition=prod"]</code></td><td>partition (and any other <code>sbatch</code> option) of the tasks</td></tr>
-<tr><td><code>[run.task] cache_dir</code></td><td><code>/media/jp/SSD2/CHU/test/work/sprocket_cache</code></td><td>sprocket's call cache (shared by all the runs)</td></tr>
+<tr><td><code>[run.task] cache_dir</code></td><td>a folder</td><td>sprocket's call cache (shared by all the runs)</td></tr>
 <tr><td><code>[run.backends.slurm] interval</code></td><td><code>5</code></td><td>seconds between two <code>sacct</code> polls: short for local tests, raise it on the cluster</td></tr>
 <tr><td><code>max_concurrency</code>, <code>[run.workflow.scatter] concurrency</code></td><td><code>50</code>, <code>10</code></td><td>jobs submitted at once, scatter elements in parallel</td></tr>
 </tbody></table>
 <p><strong><code>params/template.json</code></strong> (copied by <code>pre_process</code> for each run; <code>run</code> and <code>samples</code> stay empty, filled per run)</p>
-<table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody>
-<tr><td><code>msi_detection.references.genome</code></td><td><code>/media/jp/SSD2/CHU/refData/hg19/Homo_sapiens.GRCh37.75.wout_contigs.fa</code></td></tr>
-<tr><td><code>msi_detection.references.bed_panel</code></td><td><code>/media/jp/SSD2/CHU/refData/MSI/static/Panel_Juno_v3_Juno.amplicons.bed</code></td></tr>
-<tr><td><code>msi_detection.references.bed_roi</code></td><td><code>/media/jp/SSD2/CHU/refData/MSI/static/ROI.hg19.bed</code></td></tr>
-<tr><td><code>msi_detection.params</code></td><td><code>threads</code> (8, CPUs of each <code>msisensor-pro pro</code> only), <code>coverage_threshold</code>, <code>p_process</code> thresholds</td></tr>
+<table><thead><tr><th>Key</th><th>Role</th></tr></thead><tbody>
+<tr><td><code>msi_detection.references.genome</code></td><td>reference FASTA (e.g. GRCh37)</td></tr>
+<tr><td><code>msi_detection.references.bed_panel</code></td><td>BED of the sequencing panel</td></tr>
+<tr><td><code>msi_detection.references.bed_roi</code></td><td>BED of the ROI markers</td></tr>
+<tr><td><code>msi_detection.params</code></td><td><code>threads</code> (CPUs of each <code>msisensor-pro pro</code> only), <code>coverage_threshold</code>, <code>p_process</code> thresholds</td></tr>
 </tbody></table>
 <p><strong><code>params/install.json</code></strong>: what depends on the installation, not on the run: the workflow's
 images and python helpers (scripts given to the tasks as <code>File</code>, not built into the image), the
@@ -229,21 +216,21 @@ only place they are set (absolute paths; images as <code>file://</code> + path).
 scripts pass this file before each run's params JSON (<code>sprocket run ... @install.json @&lt;params&gt;.json</code>;
 for a key in both, the last file wins, so a params JSON can still override an image for its run).
 Forgetting it stops sprocket before anything runs (<code>missing required input</code>).</p>
-<table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody>
-<tr><td><code>msi_detection.msisensorpro_container</code></td><td><code>file:///media/jp/SSD2/CHU/code/pipeline-jp/apptainer-recipes/msisensor-pro-1.3.0.sif</code></td></tr>
-<tr><td><code>msi_detection.bedtools_container</code></td><td><code>file:///media/jp/SSD2/CHU/code/pipeline-jp/apptainer-recipes/bedtools-2.31.1.sif</code></td></tr>
-<tr><td><code>msi_detection.python_container</code></td><td><code>file:///media/jp/SSD2/CHU/code/pipeline-jp/apptainer-recipes/python-3.12.sif</code></td></tr>
-<tr><td><code>msi_detection.msi_main_helper</code></td><td><code>/media/jp/SSD2/CHU/code/pipeline-jp/main-scripts/msi_detection_main_p.py</code></td></tr>
-<tr><td><code>msi_detection.msi_report_helper</code></td><td><code>/media/jp/SSD2/CHU/code/pipeline-jp/main-scripts/msi_detection_report_p.py</code></td></tr>
+<table><thead><tr><th>Key</th><th>Points to</th></tr></thead><tbody>
+<tr><td><code>msi_detection.msisensorpro_container</code></td><td><code>apptainer-recipes/msisensor-pro-1.3.0.sif</code></td></tr>
+<tr><td><code>msi_detection.bedtools_container</code></td><td><code>apptainer-recipes/bedtools-2.31.1.sif</code></td></tr>
+<tr><td><code>msi_detection.python_container</code></td><td><code>apptainer-recipes/python-3.12.sif</code></td></tr>
+<tr><td><code>msi_detection.msi_main_helper</code></td><td><code>main-scripts/msi_detection_main_p.py</code></td></tr>
+<tr><td><code>msi_detection.msi_report_helper</code></td><td><code>main-scripts/msi_detection_report_p.py</code></td></tr>
 </tbody></table>
 <p>The images of the scripts' own Slurm jobs follow <code>WDL_DIR</code>: <code>$WDL_DIR/apptainer-recipes/python-3.12.sif</code>
 (<code>python_slurm_job</code> of <code>BASH.sprocket.cron.sh</code> / <code>BASH.sprocket.batch.sh</code>: pick_run, experiment,
 pre_process, index) and <code>$WDL_DIR/apptainer-recipes/sprocket-doc-0.31.0.sif</code> (<code>BASH.doc.sh</code>).</p>
 <p><strong>crontab</strong> (not in this folder), for example every 30 min with a log:</p>
-<pre><code class="language-sh">*/30 * * * * /media/jp/SSD2/CHU/code/pipeline-jp/BASH.sprocket.cron.sh &gt;&gt; /media/jp/SSD2/CHU/test/cron.log 2&gt;&amp;1
+<pre><code class="language-sh">*/30 * * * * /path/to/pipeline-jp/BASH.sprocket.cron.sh &gt;&gt; /path/to/cron.log 2&gt;&amp;1
 </code></pre>
 <h2>Quick start</h2>
-<pre><code class="language-sh">cd /media/jp/SSD2/CHU/code/pipeline-jp
+<pre><code class="language-sh">cd /path/to/pipeline-jp
 ./BASH.sprocket.cron.sh                       # cron mode: pre_process picks the run left to analyse, then runs it
 ./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR OUT_DIR   # batch mode: every params JSON of CONFIG_DIR, outputs in OUT_DIR
 </code></pre>
@@ -305,7 +292,7 @@ then <code>&lt;lib&gt;_&lt;marker&gt;_pro_p</code> and <code>&lt;lib&gt;_&lt;mar
 <p>Both run through a launcher, like the other python steps: a Slurm job (<code>srun</code>, jobs
 <code>msi-make_configs</code> / <code>msi-export_tsv</code>) in <code>python-3.12.sif</code> (<code>python3 -I</code>), mounting the code
 read-only, what the script reads (read-only) and the folder it writes:</p>
-<pre><code class="language-sh">S=/media/jp/SSD2/CHU
+<pre><code class="language-sh">S=/path/to/data
 ./companion-scripts/BASH.make_configs.sh $S/input/foie-mss $S/config/runs-test.txt $S/config/config-test
 ./companion-scripts/BASH.sprocket.batch.sh $S/config/config-test $S/output/config-test
 ./companion-scripts/BASH.export_tsv.sh $S/output/config-test/viz $S/output/config-test      # -&gt; $S/output/config-test/results_msi_&lt;date&gt;.tsv
@@ -459,4 +446,21 @@ calls/&lt;call&gt;/attempts/0/{command,stdout,stderr,work/}   each call (ta01_fi
 <tr><td><code>BASH.doc.sh</code>, <code>apptainer-recipes/sprocket-doc-0.31.0.def</code></td><td>HTML documentation (<code>docs/</code>, generated) and its image</td></tr>
 <tr><td><code>diagram/msi_detection_metromap.drawio</code> / <code>.preview.png</code>, <code>diagram/BASH.render_png.sh</code></td><td>Workflow diagram, its PNG export</td></tr>
 </tbody></table>
+<h2>Companion scripts</h2>
+<p>Helper scripts around the workflow, in <code>companion-scripts/</code>. The <code>BASH.*.sh</code> launchers run their
+python script as a Slurm job (<code>srun</code>) in <code>python-3.12.sif</code>; the python scripts only need the
+standard library and can also be run directly on the host.</p>
+<table><thead><tr><th>Script</th><th>Mode</th><th>What it does</th></tr></thead><tbody>
+<tr><td><a href="companion-scripts/BASH.make_configs.sh" rel="noopener noreferrer"><code>BASH.make_configs.sh</code></a> → <a href="companion-scripts/make_configs.py" rel="noopener noreferrer"><code>make_configs.py</code></a></td><td>batch, before</td><td>Writes one <code>&lt;run&gt;_params.json</code> per run of a runs file (optionally restricted to some samples); runs without BAM go to <code>failed-runs.txt</code></td></tr>
+<tr><td><a href="companion-scripts/BASH.sprocket.batch.sh" rel="noopener noreferrer"><code>BASH.sprocket.batch.sh</code></a></td><td>batch</td><td>Runs the workflow on every params JSON of a folder, then rebuilds the dashboard</td></tr>
+<tr><td><a href="companion-scripts/BASH.export_tsv.sh" rel="noopener noreferrer"><code>BASH.export_tsv.sh</code></a> → <a href="companion-scripts/export_tsv.py" rel="noopener noreferrer"><code>export_tsv.py</code></a></td><td>batch, after</td><td>Exports a reports folder as a TSV, one line per sample (<code>results_msi_&lt;date&gt;.tsv</code>)</td></tr>
+<tr><td><a href="companion-scripts/make_msi_locker.py" rel="noopener noreferrer"><code>make_msi_locker.py</code></a></td><td>cron, before the first launch</td><td>Adds every run already finished by ADIVAR to the MSI locker</td></tr>
+</tbody></table>
+<pre><code class="language-sh">./companion-scripts/BASH.make_configs.sh BAMS_DIR RUNS_FILE OUTPUT_DIR
+./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR OUT_DIR          # in screen / tmux
+./companion-scripts/BASH.export_tsv.sh VIZ_DIR OUTPUT_DIR
+./companion-scripts/make_msi_locker.py --locker-adivar ADIVAR_JSON --locker-msi MSI_TXT [--dry-run]
+</code></pre>
+<p>Details: <a href="#batch-mode-params-json-and-tsv-export" rel="noopener noreferrer">Batch mode</a> (runs file format, TSV columns) and
+<a href="#before-the-first-cron-launch" rel="noopener noreferrer">Before the first cron launch</a>.</p>
 </div></div></div></div><div class="layout__main-rail"><div class="right-sidebar__container"><div class="right-sidebar__sticky"><div class="right-sidebar__header">ON THIS PAGE</div><nav id="page-sections" data-page-sections></nav><div class="right-sidebar__back-to-top-container"><a href="#title" x-on:click.prevent="(document.querySelector('.layout__main-center') || document.scrollingElement).scrollTo({ top: 0, behavior: 'smooth' })" class="right-sidebar__back-to-top"><span class="right-sidebar__back-to-top-icon">↑</span><span class="right-sidebar__back-to-top-text">Back to top</span></a></div></div></div></div></div></div></div></body></html>
