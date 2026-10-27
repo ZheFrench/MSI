@@ -70,9 +70,7 @@ Cron mode, e.g. every 4 hours on Thursdays and Fridays:
   - [Resources](#resources)
 - [Inputs](#inputs)
 - [Outputs](#outputs)
-- [Containers: development vs production](#containers-development-vs-production)
 - [Files](#files)
-- [HTML documentation](#html-documentation)
 
 ## Before the first cron launch
 
@@ -88,12 +86,13 @@ L=/media/jp/SSD2/CHU/config/locker
 
 ## Configuration
 
-Edit these files by hand at install :
+Edit these files by hand at install:
 
-- `params/template.json`
-- `params/install.json`
-- `backends.conf/sprocket.prod.toml` # conf sprocket / slurm
-- `BASH.sprocket.cron.sh`
+- `params/template.json`: references and thresholds of each run
+- `params/install.json`: Apptainer images and Python scripts
+- `backends.conf/sprocket.prod.toml`: sprocket and Slurm settings
+- `BASH.sprocket.cron.sh`: folders and lockers of the cron mode
+- finally, edit the crontab, to launch `BASH.sprocket.cron.sh` 
 
 `params/template.json`: (copied by `pre_process` for each run; `run` and `samples` stay empty, filled per run). Define a FASTA genome (`genome`), a BED of your panel (`bed_panel`) and a
 BED of the ROI markers (`bed_roi`), the marker name in the 4th column (custom naming), e.g.
@@ -385,8 +384,14 @@ The genome, panel and ROI must use the same build as the BAMs (e.g. GRCh37 + `RO
 
 ## Outputs
 
-Returned by `ta03_report` as a `Directory` output (`viz/`), in its `work/` folder of the run directory;
-`index` then adds `runs/<run_id>/` to `$VIZ` and builds the dashboard there:
+`ta03_report` returns `viz/` as a `Directory` output, in its folder of the sprocket run:
+
+```text
+<OUT_DIR>/work/sprocket/runs/msi_detection/<timestamp>/calls/ta03_report/attempts/0/work/viz/
+```
+
+(cron mode: `$WORK/sprocket/runs/...`). `index` then copies its `runs/<run_id>/` to `$VIZ` and
+builds the dashboard there:
 
 ```text
 <VIZ>/
@@ -398,20 +403,21 @@ Returned by `ta03_report` as a `Directory` output (`viz/`), in its `work/` folde
     ├── Run154_Juno/                one folder per run (<run_id>)
     │   ├── Run154_Juno_index_run.html     
     │   ├── Run154_Juno_index_run.js
-    │   ├── C22D02853_index_sample.html    
-    │   └── C22D02853_index_sample.js
+    │   ├── NICK_index_sample.html    
+    │   └── NICK_index_sample.js
     └── Run171_Juno/
         ├── Run171_Juno_index_run.html
         ├── Run171_Juno_index_run.js
-        ├── C22D03556T_index_sample.html
-        ├── C22D03556T_index_sample.js
-        ├── C22D03587T_index_sample.html
-        └── C22D03587T_index_sample.js
+        ├── JIM_index_sample.html
+        ├── JIM_index_sample.js
+        ├── BOB_index_sample.html
+        └── BOB_index_sample.js
 ```
 
 The raw msisensor-pro outputs are not copied: they stay in each `ta02_sensorpro_pro` folder of the
-sprocket run (`_all` and `_unstable` listed in `outputs.json`); the report's log is
-`calls/ta03_report/attempts/0/stderr`. When every call came from the cache, `outputs.json` points to
+sprocket run (`_all` and `_unstable` listed in `outputs.json`); 
+
+When every call came from the cache, `outputs.json` points to
 the run that computed them, possibly in another `OUT_DIR`:
 
 ```

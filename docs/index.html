@@ -88,7 +88,7 @@ window.pagefind = import(pagefindPath)</script><script defer src="index.js"></sc
                                     }
                                 }" class="left-sidebar__row" x-bind:class="node.current ? 'bg-slate-600/50 is-scrolled-to' : 'hover:bg-slate-700/40'"><div class="left-sidebar__indent -1"></div><div class="left-sidebar__content-item-container crop-ellipsis"><img x-bind:src="node.icon" class="left-sidebar__icon light:hidden" alt="Workflow icon"><img x-bind:src="node.icon?.replace('.svg', '.light.svg')" class="left-sidebar__icon hidden light:block" alt="Workflow icon"><sprocket-tooltip content="<code>msi_detection</code>" class="crop-ellipsis" x-bind:class="node.current ? 'text-slate-50' : 'group-hover:text-slate-50'"><span><code>msi_detection</code></span></sprocket-tooltip></div></a></ul></li></ul></div></div></div><div class="md:hidden fixed inset-0 z-30 bg-black/50" x-cloak x-show="sidebarState !== 'hidden'" x-on:click="collapseSidebar()" aria-hidden="true"></div><div class="layout__main-center"><div class="layout__main-shell"><div class="layout__main-center-content layout__main-body"><div class="flex flex-col gap-5" x-show="$store.search.query !== ''" x-data><h2 class="text-base leading-6 font-medium" x-text="`${$store.search.results.length} results for '${$store.search.query}'`"></h2><ul class="flex flex-col gap-5"><template x-for="result in $store.search.results" :key="result.url"><li class="search-result"><div class="flex flex-row gap-2 items-center"><img class="size-6" x-bind:src="theme === 'dark' ? `assets/${result.meta.image_dark}` : `assets/${result.meta.image_light}`" x-bind:alt="result.meta.image_alt || result.meta.title"><a :href="result.url" class="text-2xl leading-8 text-slate-50 font-medium" x-text="result.meta.title"></a></div><p class="search-result-excerpt" x-html="result.excerpt"></p></li></template><div x-show="!$store.search.loading &amp;&amp; $store.search.results.length === 0"><li class="flex place-content-center"><img src="assets/search.svg" class="size-8 block light:hidden" alt="Search icon"><img src="assets/search.light.svg" class="size-8 hidden light:block" alt="Search icon"></li><li class="flex gap-1 place-content-center text-center break-words whitespace-normal text-sm text-slate-500"><span x-text="'No results found for'"></span><span x-text="`&quot;${$store.search.query}&quot;`" class="text-slate-50"></span></li></div></ul></div><div><div class="flex gap-1 mb-3 max-md:hidden" x-show="showCenterButtons"><button type="button" aria-label="Hide sidebar" x-on:click="collapseSidebar()" x-bind:aria-pressed="sidebarState === 'hidden'" x-bind:class="getSidebarButtonClass('hidden')"><img src="assets/sidebar-icon-hide.svg" alt="" class="block light:hidden"></img><img src="assets/sidebar-icon-hide.light.svg" alt="" class="hidden light:block"></img></button><button type="button" aria-label="Default sidebar width" x-on:click="restoreSidebar()" x-bind:aria-pressed="sidebarState === 'normal'" x-bind:class="getSidebarButtonClass('normal')"><img src="assets/sidebar-icon-default.svg" alt="" class="block light:hidden"></img><img src="assets/sidebar-icon-default.light.svg" alt="" class="hidden light:block"></img></button><button type="button" aria-label="Expand sidebar" x-on:click="expandSidebar()" x-bind:aria-pressed="sidebarState === 'xl'" x-bind:class="getSidebarButtonClass('xl')"><img src="assets/sidebar-icon-expand.svg" alt="" class="block light:hidden"></img><img src="assets/sidebar-icon-expand.light.svg" alt="" class="hidden light:block"></img></button></div></div><div x-show="$store.search.query === ''"><div class="main__section"><div class="markdown-body" data-pagefind-body meta-img-dark="home.svg" meta-img-light="home.light.svg" data-pagefind-meta="image_dark[meta-img-dark], image_light[meta-img-light]"><h1>Microsatellite instability (MSI) detection Workflow</h1>
 <h2>Introduction</h2>
-<p>This workflow detects microsatellite instability (MSI). It is written in WDL and run with
+<p>This workflow detects microsatellite instability (MSI). It is written in <a href="https://openwdl.org/" rel="noopener noreferrer">WDL</a> and run with
 <a href="https://sprocket.bio" rel="noopener noreferrer">sprocket</a> on a Slurm + Apptainer backend.
 It uses two tool modules, MSIsensor-pro and bedtools, and three Apptainer images: one per tool plus
 a generic Python image for the other steps.</p>
@@ -100,9 +100,8 @@ only the microsatellites inside the panel regions are analysed, and with the ROI
 the classic MSI markers (BAT25, BAT26, NR21...) among them.</p>
 <p>In cron mode, the pipeline compares two lockers: ADIVAR's (JSON, <code>status</code> 3 = finished) and the MSI
 locker (text, one run per line = already analysed). A run finished by ADIVAR and not yet in the MSI
-locker is analysed, then added to it. Before the first launch, build the MSI locker from ADIVAR's
-(<code>companion-scripts/make_msi_locker.py</code>, see <a href="#configuration-to-set-at-install" rel="noopener noreferrer">Configuration</a>), so
-that past runs are not re-analysed. As a safeguard, the cron only launches when exactly one run
+locker is analysed, then added to it.</p>
+<p>As a safeguard, the cron only launches when exactly one run
 differs between the two lockers: with more, it stops with an error and analyses nothing.</p>
 <p>For the picked run, the pipeline reads a single field of its <code>SampleSheet.csv</code>: the Experiment Name, which gives the BAM folder to analyse.</p>
 <table>
@@ -150,9 +149,7 @@ differs between the two lockers: with more, it stops with an error and analyses 
 </li>
 <li><a href="#inputs" rel="noopener noreferrer">Inputs</a></li>
 <li><a href="#outputs" rel="noopener noreferrer">Outputs</a></li>
-<li><a href="#containers-development-vs-production" rel="noopener noreferrer">Containers: development vs production</a></li>
 <li><a href="#files" rel="noopener noreferrer">Files</a></li>
-<li><a href="#html-documentation" rel="noopener noreferrer">HTML documentation</a></li>
 </ul>
 <h2>Before the first cron launch</h2>
 <p>In order the cron does not analyse every past run, fill the MSI locker
@@ -163,12 +160,14 @@ L=/media/jp/SSD2/CHU/config/locker
 ./companion-scripts/make_msi_locker.py --locker-adivar $L/adivar-testNS.json --locker-msi $L/msi-sensor.locker.txt
 </code></pre>
 <h2>Configuration</h2>
-<p>Edit these files by hand at install :</p>
+<p>Edit these files by hand at install:</p>
 <ul>
-<li><code>params/template.json</code></li>
-<li><code>params/install.json</code></li>
-<li><code>backends.conf/sprocket.prod.toml</code> # conf sprocket / slurm</li>
-<li><code>BASH.sprocket.cron.sh</code></li>
+<li><code>params/template.json</code>: references and thresholds of each run</li>
+<li><code>params/install.json</code>: Apptainer images and Python scripts</li>
+<li><code>backends.conf/sprocket.prod.toml</code>: sprocket and Slurm settings</li>
+<li><code>BASH.sprocket.cron.sh</code>: folders and lockers of the cron mode</li>
+<li>finally, the crontab, to launch <code>BASH.sprocket.cron.sh</code> (example in the
+<a href="#introduction" rel="noopener noreferrer">Introduction</a>)</li>
 </ul>
 <p><code>params/template.json</code>: (copied by <code>pre_process</code> for each run; <code>run</code> and <code>samples</code> stay empty, filled per run). Define a FASTA genome (<code>genome</code>), a BED of your panel (<code>bed_panel</code>) and a
 BED of the ROI markers (<code>bed_roi</code>), the marker name in the 4th column (custom naming), e.g.
@@ -400,8 +399,11 @@ params key (see <code>BASH.sprocket.cron.sh</code>):</p>
 </tbody></table>
 <p>The genome, panel and ROI must use the same build as the BAMs (e.g. GRCh37 + <code>ROI.hg19.bed</code>).</p>
 <h2>Outputs</h2>
-<p>Returned by <code>ta03_report</code> as a <code>Directory</code> output (<code>viz/</code>), in its <code>work/</code> folder of the run directory;
-<code>index</code> then adds <code>runs/&lt;run_id&gt;/</code> to <code>$VIZ</code> and builds the dashboard there:</p>
+<p><code>ta03_report</code> returns <code>viz/</code> as a <code>Directory</code> output, in its folder of the sprocket run:</p>
+<pre><code class="language-text">&lt;OUT_DIR&gt;/work/sprocket/runs/msi_detection/&lt;timestamp&gt;/calls/ta03_report/attempts/0/work/viz/
+</code></pre>
+<p>(cron mode: <code>$WORK/sprocket/runs/...</code>). <code>index</code> then copies its <code>runs/&lt;run_id&gt;/</code> to <code>$VIZ</code> and
+builds the dashboard there:</p>
 <pre><code class="language-text">&lt;VIZ&gt;/
 ├── index_msi_run.html              all runs (written once)
 ├── index_msi_run.js                its data, rewritten by each index
@@ -411,19 +413,19 @@ params key (see <code>BASH.sprocket.cron.sh</code>):</p>
     ├── Run154_Juno/                one folder per run (&lt;run_id&gt;)
     │   ├── Run154_Juno_index_run.html     
     │   ├── Run154_Juno_index_run.js
-    │   ├── C22D02853_index_sample.html    
-    │   └── C22D02853_index_sample.js
+    │   ├── NICK_index_sample.html    
+    │   └── NICK_index_sample.js
     └── Run171_Juno/
         ├── Run171_Juno_index_run.html
         ├── Run171_Juno_index_run.js
-        ├── C22D03556T_index_sample.html
-        ├── C22D03556T_index_sample.js
-        ├── C22D03587T_index_sample.html
-        └── C22D03587T_index_sample.js
+        ├── JIM_index_sample.html
+        ├── JIM_index_sample.js
+        ├── BOB_index_sample.html
+        └── BOB_index_sample.js
 </code></pre>
 <p>The raw msisensor-pro outputs are not copied: they stay in each <code>ta02_sensorpro_pro</code> folder of the
-sprocket run (<code>_all</code> and <code>_unstable</code> listed in <code>outputs.json</code>); the report's log is
-<code>calls/ta03_report/attempts/0/stderr</code>. When every call came from the cache, <code>outputs.json</code> points to
+sprocket run (<code>_all</code> and <code>_unstable</code> listed in <code>outputs.json</code>);</p>
+<p>When every call came from the cache, <code>outputs.json</code> points to
 the run that computed them, possibly in another <code>OUT_DIR</code>:</p>
 <pre><code>&lt;sprocket run&gt;/calls/ta02_sensorpro_pro-&lt;N&gt;/attempts/0/work/&lt;sample&gt;{,_all,_dis,_unstable}
 &lt;sprocket run&gt;/calls/ta03_report/attempts/0/stderr
