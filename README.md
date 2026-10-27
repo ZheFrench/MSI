@@ -300,22 +300,19 @@ are in the run that computed them.
 ## Companion scripts
 
 Helper scripts around the workflow, in `companion-scripts/`. The `BASH.*.sh` launchers run their
-python script as a Slurm job (`srun`) in `python-3.12.sif`; the python scripts only need the
-standard library and can also be run directly on the host.
+python script as a Slurm job (`srun`) in `python-3.12.sif`;
 
-| Script | Mode | What it does |
-|---|---|---|
-| [`BASH.make_configs.sh`](companion-scripts/BASH.make_configs.sh) → [`make_configs.py`](companion-scripts/make_configs.py) | batch, before | Writes one `<run>_params.json` per run of a runs file (optionally restricted to some samples); runs without BAM go to `failed-runs.txt` |
-| [`BASH.sprocket.batch.sh`](companion-scripts/BASH.sprocket.batch.sh) | batch | Runs the workflow on every params JSON of a folder, then rebuilds the dashboard |
-| [`BASH.export_tsv.sh`](companion-scripts/BASH.export_tsv.sh) → [`export_tsv.py`](companion-scripts/export_tsv.py) | batch, after | Exports a reports folder as a TSV, one line per sample (`results_msi_<date>.tsv`) |
-| [`make_msi_locker.py`](companion-scripts/make_msi_locker.py) | cron, before the first launch | Adds every run already finished by ADIVAR to the MSI locker |
+| Script | Mode | Inputs | What it does |
+|---|---|---|---|
+| [`make_msi_locker.py`](companion-scripts/make_msi_locker.py) | cron, before the first launch | `--locker-adivar` ADIVAR's locker JSON, `--locker-msi` MSI locker (text, created if missing), `--dry-run` | Adds every run already finished by ADIVAR to the MSI locker |
+| [`BASH.make_configs.sh`](companion-scripts/BASH.make_configs.sh) → [`make_configs.py`](companion-scripts/make_configs.py) | batch, before | `BAMS_DIR` group folder of BAM folders, `RUNS_FILE` runs file (run, or run + sample ID per line), `OUTPUT_DIR` | Writes one `<run>_params.json` per run of a runs file (optionally restricted to some samples); runs without BAM go to `failed-runs.txt` |
+| [`BASH.sprocket.batch.sh`](companion-scripts/BASH.sprocket.batch.sh) | batch | `CONFIG_DIR` folder of params JSON, `VIZ` reports folder, `WORK` sprocket's runs | Runs the workflow on every params JSON of a folder, then rebuilds the dashboard |
+| [`BASH.export_tsv.sh`](companion-scripts/BASH.export_tsv.sh) → [`export_tsv.py`](companion-scripts/export_tsv.py) | batch, after | `VIZ` reports folder (read only), `OUTPUT_DIR` where the TSV goes | Exports a reports folder as a TSV, one line per sample (`results_msi_<date>.tsv`) |
 
 ```sh
-./companion-scripts/BASH.make_configs.sh BAMS_DIR RUNS_FILE OUTPUT_DIR
-./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR VIZ WORK         # in screen / tmux
-./companion-scripts/BASH.export_tsv.sh VIZ OUTPUT_DIR
 ./companion-scripts/make_msi_locker.py --locker-adivar ADIVAR_JSON --locker-msi MSI_TXT [--dry-run]
+./companion-scripts/BASH.make_configs.sh BAMS_DIR RUNS_FILE OUTPUT_DIR
+./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR VIZ WORK  # in screen / tmux
+./companion-scripts/BASH.export_tsv.sh VIZ OUTPUT_DIR
 ```
 
-Details: [Batch mode](#batch-mode-params-json-and-tsv-export) (runs file format, TSV columns) and
-[Before the first cron launch](#before-the-first-cron-launch).
