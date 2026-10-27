@@ -142,11 +142,7 @@ differs between the two lockers: with more, it stops with an error and analyses 
 <li><a href="#batch-mode-params-json-and-tsv-export" rel="noopener noreferrer">Batch mode: params JSON and TSV export</a></li>
 </ul>
 </li>
-<li><a href="#tasks" rel="noopener noreferrer">Tasks</a>
-<ul>
-<li><a href="#resources" rel="noopener noreferrer">Resources</a></li>
-</ul>
-</li>
+<li><a href="#tasks" rel="noopener noreferrer">Tasks</a></li>
 <li><a href="#inputs" rel="noopener noreferrer">Inputs</a></li>
 <li><a href="#outputs" rel="noopener noreferrer">Outputs</a></li>
 <li><a href="#files" rel="noopener noreferrer">Files</a></li>
@@ -305,18 +301,23 @@ read-only, what the script reads (read-only) and the folder it writes:</p>
 </code></pre>
 <h2>Tasks</h2>
 <p>Calls are named after their line on the diagram, <code>t&lt;line&gt;&lt;rank&gt;_&lt;step&gt;</code>: <code>ta</code> BAMs (green),
-<code>tb</code> msisensor-pro list (blue, panel steps included), <code>tc</code> ROI markers (red).</p>
-<table><thead><tr><th>Call (task)</th><th>Runs</th><th>What it does</th><th>Main output</th></tr></thead><tbody>
-<tr><td><code>ta01_find_bams</code> (<code>find_bams</code>)</td><td>python image, bash</td><td>Lists every <code>*.bam</code> of the run directory (<code>inputs.run</code>) (sub-folders with <code>params.recursive</code>), with its index (<code>.bam.bai</code> or <code>.bai</code>), its library (folder relative to <code>input_dir</code>, <code>.</code> if none) and its sample name (BAM basename). <code>inputs.run</code> is a <code>Directory</code> (mounted by the engine); paths are returned relative to it. With <code>inputs.samples</code>, keeps only the BAMs whose name contains one of these IDs (every library). Fails if a BAM has no index, no BAM is found, or a sample ID matches no BAM.</td><td><code>bams</code>: one row per BAM</td></tr>
-<tr><td><code>tb01_sensorpro_scan</code> (<code>sensorpro.scan</code>)</td><td>msisensor-pro</td><td><code>msisensor-pro scan</code> of the genome: every microsatellite site. Skipped when <code>references.pro_list</code> is given. Not redone from one run to the next: sprocket's call cache (<code>[run.task] cache = "on"</code>) reuses the previous scan (same genome and image), as long as that run's folder is kept.</td><td><code>&lt;genome&gt;.msisensor_pro.list</code></td></tr>
-<tr><td><code>tb02_list_to_bed</code> (<code>list_to_bed</code>)</td><td>python image</td><td>Converts the list to BED6 (start = location − 1, end = start + unit length × repeat times).</td><td><code>&lt;list&gt;.bed</code></td></tr>
-<tr><td><code>tb03_panel_chrom</code> (<code>align_chrom_naming</code>)</td><td>python image, awk</td><td>Only with <code>bed_panel</code>. Copy of the panel BED with its chromosome names (<code>chr1</code> / <code>1</code>) aligned on the list's: bedtools matches them literally.</td><td><code>&lt;panel&gt;.chrnorm.bed</code></td></tr>
-<tr><td><code>tb04_panel_intersect</code> (<code>bedtools.intersect</code>)</td><td>bedtools</td><td><code>bedtools intersect -wa -wb -f 1.0</code>: the sites fully inside a panel region, one row per overlap.</td><td><code>&lt;list&gt;.panel.intersect.tsv</code></td></tr>
-<tr><td><code>tb05_panel_correspondence</code> (<code>name_correspondence</code>)</td><td>python image, awk</td><td>Turns the intersection into a BED6 named <code>&lt;site&gt;#&lt;probe&gt;#&lt;chrom:start-end&gt;</code>.</td><td><code>&lt;list&gt;.panel.bed</code></td></tr>
-<tr><td><code>tb06_mark_list</code> (<code>mark_list</code>)</td><td>python image</td><td>Only with <code>bed_panel</code>. Full list, same rows, <code>filter</code> = <code>PASS</code> for the panel sites, <code>NO</code> elsewhere: <strong>the list analysed by msisensor-pro</strong>.</td><td><code>&lt;list&gt;.panel.list</code></td></tr>
-<tr><td><code>tc01_roi_chrom</code>, <code>tc02_roi_intersect</code>, <code>tc03_roi_correspondence</code></td><td>python image / bedtools / python image</td><td>Only with <code>bed_roi</code>. Same three steps with the ROI markers, on the panel sites when there is a panel (genome-wide otherwise). Name ends with <code>#&lt;marker&gt;</code>.</td><td><code>&lt;list&gt;.panel.roi.bed</code></td></tr>
-<tr><td><code>ta02_sensorpro_pro</code> × N (<code>sensorpro.pro</code>)</td><td>msisensor-pro</td><td>Scatter, one per BAM: <code>msisensor-pro pro -d &lt;analysis list&gt; -t &lt;bam&gt; -b threads -c coverage_threshold</code>. A failure on any BAM fails the workflow.</td><td><code>&lt;sample&gt;</code>, <code>_all</code>, <code>_dis</code>, <code>_unstable</code></td></tr>
-<tr><td><code>ta03_report</code> (<code>report</code>)</td><td>python image</td><td>Reads every BAM's <code>_all</code> (<code>File</code>s, nothing copied) and builds this run's reports in <code>viz/runs/&lt;run_id&gt;/</code> (run page, sample pages; the all-runs dashboard is built by <code>index</code> after the run); log on its stderr; writes nothing outside its task.</td><td><code>viz/</code> (<code>Directory</code>)</td></tr>
+<code>tb</code> msisensor-pro list (blue, panel steps included), <code>tc</code> ROI markers (red).
+CPU and Memory are what each job reserves from Slurm (<code>requirements</code> of the task, passed to
+<code>sbatch</code>); only <code>ta02_sensorpro_pro</code> takes <code>params.threads</code>, every other task keeps its default
+<code>threads = 1</code>. No time limit is set: the partition's applies.</p>
+<table><thead><tr><th>Call (task)</th><th>Runs</th><th>What it does</th><th>Main output</th><th>CPU</th><th>Memory</th><th>Set in</th></tr></thead><tbody>
+<tr><td><code>ta01_find_bams</code> (<code>find_bams</code>)</td><td>python image, bash</td><td>Lists every <code>*.bam</code> of the run directory (<code>inputs.run</code>) (sub-folders with <code>params.recursive</code>), with its index (<code>.bam.bai</code> or <code>.bai</code>), its library (folder relative to <code>input_dir</code>, <code>.</code> if none) and its sample name (BAM basename). <code>inputs.run</code> is a <code>Directory</code> (mounted by the engine); paths are returned relative to it. With <code>inputs.samples</code>, keeps only the BAMs whose name contains one of these IDs (every library). Fails if a BAM has no index, no BAM is found, or a sample ID matches no BAM.</td><td><code>bams</code>: one row per BAM</td><td>1</td><td>512 MiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
+<tr><td><code>tb01_sensorpro_scan</code> (<code>sensorpro.scan</code>)</td><td>msisensor-pro</td><td><code>msisensor-pro scan</code> of the genome: every microsatellite site. Skipped when <code>references.pro_list</code> is given. Not redone from one run to the next: sprocket's call cache (<code>[run.task] cache = "on"</code>) reuses the previous scan (same genome and image), as long as that run's folder is kept.</td><td><code>&lt;genome&gt;.msisensor_pro.list</code></td><td>1</td><td>4 GiB</td><td><code>module/msisensorpro-1.3.0.wdl</code></td></tr>
+<tr><td><code>tb02_list_to_bed</code> (<code>list_to_bed</code>)</td><td>python image</td><td>Converts the list to BED6 (start = location − 1, end = start + unit length × repeat times).</td><td><code>&lt;list&gt;.bed</code></td><td>1</td><td>2 GiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
+<tr><td><code>tb03_panel_chrom</code> (<code>align_chrom_naming</code>)</td><td>python image, awk</td><td>Only with <code>bed_panel</code>. Copy of the panel BED with its chromosome names (<code>chr1</code> / <code>1</code>) aligned on the list's: bedtools matches them literally.</td><td><code>&lt;panel&gt;.chrnorm.bed</code></td><td>1</td><td>512 MiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
+<tr><td><code>tb04_panel_intersect</code> (<code>bedtools.intersect</code>)</td><td>bedtools</td><td><code>bedtools intersect -wa -wb -f 1.0</code>: the sites fully inside a panel region, one row per overlap.</td><td><code>&lt;list&gt;.panel.intersect.tsv</code></td><td>1</td><td>2 GiB</td><td><code>module/bedtools-2.31.1.wdl</code></td></tr>
+<tr><td><code>tb05_panel_correspondence</code> (<code>name_correspondence</code>)</td><td>python image, awk</td><td>Turns the intersection into a BED6 named <code>&lt;site&gt;#&lt;probe&gt;#&lt;chrom:start-end&gt;</code>.</td><td><code>&lt;list&gt;.panel.bed</code></td><td>1</td><td>512 MiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
+<tr><td><code>tb06_mark_list</code> (<code>mark_list</code>)</td><td>python image</td><td>Only with <code>bed_panel</code>. Full list, same rows, <code>filter</code> = <code>PASS</code> for the panel sites, <code>NO</code> elsewhere: <strong>the list analysed by msisensor-pro</strong>.</td><td><code>&lt;list&gt;.panel.list</code></td><td>1</td><td>2 GiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
+<tr><td><code>tc01_roi_chrom</code> (<code>align_chrom_naming</code>)</td><td>python image, awk</td><td>Only with <code>bed_roi</code>. Same as <code>tb03</code> with the ROI BED.</td><td><code>&lt;roi&gt;.chrnorm.bed</code></td><td>1</td><td>512 MiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
+<tr><td><code>tc02_roi_intersect</code> (<code>bedtools.intersect</code>)</td><td>bedtools</td><td>Same as <code>tb04</code> with the ROI markers, on the panel sites when there is a panel (genome-wide otherwise).</td><td><code>&lt;list&gt;.panel.roi.intersect.tsv</code></td><td>1</td><td>2 GiB</td><td><code>module/bedtools-2.31.1.wdl</code></td></tr>
+<tr><td><code>tc03_roi_correspondence</code> (<code>name_correspondence</code>)</td><td>python image, awk</td><td>Same as <code>tb05</code>; name ends with <code>#&lt;marker&gt;</code>.</td><td><code>&lt;list&gt;.panel.roi.bed</code></td><td>1</td><td>512 MiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
+<tr><td><code>ta02_sensorpro_pro</code> × N (<code>sensorpro.pro</code>)</td><td>msisensor-pro</td><td>Scatter, one per BAM: <code>msisensor-pro pro -d &lt;analysis list&gt; -t &lt;bam&gt; -b threads -c coverage_threshold</code>. A failure on any BAM fails the workflow.</td><td><code>&lt;sample&gt;</code>, <code>_all</code>, <code>_dis</code>, <code>_unstable</code></td><td><code>params.threads</code> (8: <code>pro -b</code>)</td><td>4 GiB</td><td>CPU: params JSON; memory: <code>module/msisensorpro-1.3.0.wdl</code></td></tr>
+<tr><td><code>ta03_report</code> (<code>report</code>)</td><td>python image</td><td>Reads every BAM's <code>_all</code> (<code>File</code>s, nothing copied) and builds this run's reports in <code>viz/runs/&lt;run_id&gt;/</code> (run page, sample pages; the all-runs dashboard is built by <code>index</code> after the run); log on its stderr; writes nothing outside its task.</td><td><code>viz/</code> (<code>Directory</code>)</td><td>1</td><td>2 GiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
 </tbody></table>
 <p>The python steps of the workflow are subcommands of two self-contained scripts (a WDL task gets
 its script alone): <a href="main-scripts/msi_detection_main_p.py" rel="noopener noreferrer"><code>main-scripts/msi_detection_main_p.py</code></a>
@@ -327,21 +328,6 @@ editing the report must not invalidate the list steps, whose outputs are whole-g
 (~100 MB each). <a href="main-scripts/msi_detection_post_p.py" rel="noopener noreferrer"><code>main-scripts/msi_detection_post_p.py</code></a> only holds
 <code>index</code>, run after the workflow by the BASH scripts; it imports the page code (CSS, <code>&lt;head&gt;</code>,
 <code>.js</code> writer) of <code>msi_detection_report_p.py</code>, next to it in <code>main-scripts/</code>.</p>
-<h3>Resources</h3>
-<p>What each job reserves from Slurm (<code>requirements</code> of the task: <code>cpu</code>, <code>memory</code>; sprocket passes them
-to <code>sbatch</code>). Only <code>ta02_sensorpro_pro</code> takes <code>params.threads</code>: every other task keeps its default
-<code>threads = 1</code>. No time limit is set: the partition's applies.</p>
-<table><thead><tr><th>Job</th><th>Task / script</th><th>CPU</th><th>Memory</th><th>Set in</th></tr></thead><tbody>
-<tr><td><code>ta01_find_bams</code></td><td><code>find_bams</code></td><td>1</td><td>512 MiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
-<tr><td><code>tb01_sensorpro_scan</code></td><td><code>sensorpro.scan</code></td><td>1</td><td>4 GiB</td><td><code>module/msisensorpro-1.3.0.wdl</code></td></tr>
-<tr><td><code>tb02_list_to_bed</code></td><td><code>list_to_bed</code></td><td>1</td><td>2 GiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
-<tr><td><code>tb03_panel_chrom</code>, <code>tc01_roi_chrom</code></td><td><code>align_chrom_naming</code></td><td>1</td><td>512 MiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
-<tr><td><code>tb04_panel_intersect</code>, <code>tc02_roi_intersect</code></td><td><code>bedtools.intersect</code></td><td>1</td><td>2 GiB</td><td><code>module/bedtools-2.31.1.wdl</code></td></tr>
-<tr><td><code>tb05_panel_correspondence</code>, <code>tc03_roi_correspondence</code></td><td><code>name_correspondence</code></td><td>1</td><td>512 MiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
-<tr><td><code>tb06_mark_list</code></td><td><code>mark_list</code></td><td>1</td><td>2 GiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
-<tr><td><code>ta02_sensorpro_pro</code> × N (one per BAM)</td><td><code>sensorpro.pro</code></td><td><code>params.threads</code> (8: <code>pro -b</code>)</td><td>4 GiB</td><td>CPU: params JSON; memory: <code>module/msisensorpro-1.3.0.wdl</code></td></tr>
-<tr><td><code>ta03_report</code></td><td><code>report</code></td><td>1</td><td>2 GiB</td><td><code>msi_detection-0.1.0.wdl</code></td></tr>
-</tbody></table>
 <h2>Inputs</h2>
 <p>Keys of the params JSON, all prefixed <code>msi_detection.</code> (see <a href="params/template.json" rel="noopener noreferrer"><code>params/template.json</code></a>).
 <code>inputs</code>, <code>references</code> and <code>params</code> are objects (WDL structs);</p>
