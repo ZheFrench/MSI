@@ -85,13 +85,13 @@ L=/path/to/locker
 
 **Edit these files by hand at install:**
 
-- `params/template.json`: references and thresholds of each run
-- `params/install.json`: Apptainer images and Python scripts
-- `backends.conf/sprocket.prod.toml`: sprocket and Slurm settings
-- `BASH.sprocket.cron.sh`: folders and lockers of the cron mode
+- [`params/template.json`](params/template.json): references and thresholds of each run
+- [`params/install.json`](params/install.json): Apptainer images and Python scripts
+- [`backends.conf/sprocket.prod.toml`](backends.conf/sprocket.prod.toml): sprocket and Slurm settings
+- [`BASH.sprocket.cron.sh`](BASH.sprocket.cron.sh): folders and lockers of the cron mode
 - finally, edit the crontab, to launch `BASH.sprocket.cron.sh` 
 
-`params/template.json`: (copied by `pre_process` for each run; `run` and `samples` stay empty, filled per run). Define a FASTA genome (`genome`), a BED of your panel (`bed_panel`) and a
+`params/template.json`: Define a FASTA genome (`genome`), a BED of your panel (`bed_panel`) and a
 BED of the ROI markers (`bed_roi`), the marker name in the 4th column (custom naming), e.g.
 `ROI.hg19.bed`:
 
@@ -104,12 +104,6 @@ chr11	125490736	125490816	NR22	0	+
 chr13	31722591	31722667	HT17	0	+
 chr14	23652317	23652397	NR21	0	+
 ```
-
-Set the workflow's thresholds in the same file, under `msi_detection.params` (current values in
-[`params/template.json`](params/template.json), each key described in [Inputs](#inputs)).
-
-[`params/install.json`](params/install.json): paths of the Apptainer images and Python scripts the WDL workflow uses
-(details below).
 
 **`BASH.sprocket.cron.sh`** (cron mode)
 
