@@ -1,19 +1,25 @@
 Bootstrap: docker
-From: ubuntu:22.04
+From: ubuntu:24.04
+
+%labels
+    Software bedtools
+    Source https://packages.ubuntu.com/noble/bedtools
+
+%help
+    Conteneur Apptainer contenant bedtools (paquet Ubuntu 24.04).
+
+    Utilisation :
+        apptainer run bedtools.sif --help
+        apptainer exec bedtools.sif bedtools intersect -a a.bed -b b.bed
 
 %post
-    apt-get update -y && apt-get install -y \
-    make git tar g++ zlib1g-dev libbz2-dev liblzma-dev python3
-
-    git clone --depth=1 --branch v2.31.1 https://github.com/arq5x/bedtools2
-    cd bedtools2
-    make
-    mv bin/* /usr/local/bin/
-    cd ../
-    rm -rf bedtools2
-
-%environment
-    export PATH=/usr/local/bin:$PATH
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -y && apt-get install -y --no-install-recommends bedtools
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
 
 %runscript
     exec bedtools "$@"
+
+%test
+    bedtools --version

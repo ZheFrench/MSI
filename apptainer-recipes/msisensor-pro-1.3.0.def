@@ -1,8 +1,8 @@
 Bootstrap: docker
-From: ubuntu:22.04
+From: ubuntu:24.04
 
 %labels
-    Author claude
+    Author jeanphilippe.villemin@chu-montpellier.fr
     Software msisensor-pro
     Source https://github.com/xjtu-omics/msisensor-pro
 
@@ -26,8 +26,7 @@ From: ubuntu:22.04
         libbz2-dev \
         zlib1g-dev \
         libcurl4-openssl-dev \
-        libncurses5-dev \
-        libncursesw5-dev \
+        libncurses-dev \
         liblzma-dev \
         pkg-config \
         cmake
