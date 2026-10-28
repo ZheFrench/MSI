@@ -2,7 +2,7 @@
 """
 msi_detection_main_p.py
 
-Python steps run inside the msi_detection-0.1.0.wdl workflow, before the
+Python steps run inside the msi_detection-1.0.0.wdl workflow, before the
 msisensor-pro analysis (msi_main_helper, a File given to tb02_list_to_bed and
 tb06_mark_list): they prepare the reference microsatellite list. One
 subcommand each (this run's report: msi_detection_report_p.py; the all-runs
@@ -18,8 +18,8 @@ Kept apart from the report on purpose: sprocket's call cache keys on the task's
 input files, so editing the report code must not invalidate these steps (their
 outputs are whole-genome lists, ~100 MB each).
 
-Usage (normally only from msi_detection-0.1.0.wdl):
-    sprocket run msi_detection-0.1.0.wdl @<params JSON>
+Usage (normally only from msi_detection-1.0.0.wdl):
+    sprocket run msi_detection-1.0.0.wdl @<params JSON>
 """
 
 import argparse
@@ -115,7 +115,7 @@ def apply_panel_filter_to_list(list_path: Path, panel_bed_path: Path, output_pat
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Reference list steps of the msi_detection-0.1.0.wdl workflow.")
+    parser = argparse.ArgumentParser(description="Reference list steps of the msi_detection-1.0.0.wdl workflow.")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("list-to-bed", help="MSIsensor-pro .list -> BED6.")

@@ -2,7 +2,7 @@
 """
 msi_detection_report_p.py
 
-Report step run inside the msi_detection-0.1.0.wdl workflow (msi_report_helper,
+Report step run inside the msi_detection-1.0.0.wdl workflow (msi_report_helper,
 a File given to ta03_report). The reference list steps are in
 msi_detection_main_p.py, the all-runs dashboard (after the workflow) in
 msi_detection_post_p.py, which imports this script's page code.
@@ -27,8 +27,8 @@ directly in it). A failed BAM fails the workflow before report runs.
 The script must stay self-contained (no import of the other scripts): in a
 WDL task it is localized on its own.
 
-Usage (normally only from msi_detection-0.1.0.wdl):
-    sprocket run msi_detection-0.1.0.wdl @<params JSON>
+Usage (normally only from msi_detection-1.0.0.wdl):
+    sprocket run msi_detection-1.0.0.wdl @<params JSON>
 """
 
 import argparse
@@ -1004,7 +1004,7 @@ def report(args) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Report step of the msi_detection-0.1.0.wdl workflow (inside its ta03_report task).")
+    parser = argparse.ArgumentParser(description="Report step of the msi_detection-1.0.0.wdl workflow (inside its ta03_report task).")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("report", help="Generate this run's viz/runs/<run_id>/ pages.")

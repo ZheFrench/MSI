@@ -2,7 +2,7 @@
 """
 msi_detection_post_p.py
 
-Run after the msi_detection-0.1.0.wdl workflow, outside it (it writes into
+Run after the msi_detection-1.0.0.wdl workflow, outside it (it writes into
 the reports folder). The steps inside the workflow are in
 msi_detection_main_p.py (reference lists) and msi_detection_report_p.py (this
 run's report), whose page code it reuses (import: both scripts sit in
@@ -334,7 +334,7 @@ def index(args) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Dashboard of the msi_detection-0.1.0.wdl runs (after the workflow).")
+    parser = argparse.ArgumentParser(description="Dashboard of the msi_detection-1.0.0.wdl runs (after the workflow).")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("index", help="Add a run's pages to the reports folder and rebuild the dashboard.")

@@ -2,7 +2,7 @@
 """
 msi_detection_pre_p.py
 
-Pre-processing of the msi_detection-0.1.0.wdl workflow: picks the run(s) left
+Pre-processing of the msi_detection-1.0.0.wdl workflow: picks the run(s) left
 to analyse and writes, for each, the params JSON (config) sprocket runs it
 with. Steps:
 
