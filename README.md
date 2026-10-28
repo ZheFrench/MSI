@@ -190,7 +190,7 @@ Keys of the params JSON, all prefixed `msi_detection.` (see [`params/template.js
 | Key | Required | Description |
 |---|---|---|
 | `inputs.run` | yes | Run directory; its name is the `run_id` |
-| `inputs.samples` | no | Sample IDs: only the BAMs whose name contains one of them are analysed (an ID with no BAM fails the run). Without it: every BAM but the controls |
+| `inputs.samples` | no | Sample IDs: only the BAMs named `<ID>.bam` (exact name, every library) are analysed (an ID with no BAM fails the run). Without it: every BAM but the controls |
 | `references.genome` | yes | Fasta the BAMs are aligned on |
 | `references.pro_list` | no | Existing scan list: skips the scan |
 | `references.bed_panel` | no | Plain panel BED (no `track` line, e.g. `*.amplicons.bed`) |

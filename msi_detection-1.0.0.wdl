@@ -283,7 +283,7 @@ workflow msi_detection {
 	}
 
 	parameter_meta {
-		inputs: "run: run directory; every *.bam in it is processed (one sub-folder per library, e.g. alignments_libA/, with params.recursive = true). Its name is the run_id. samples (optional): only the BAMs whose name contains one of these IDs are processed (each ID must match a BAM)."
+		inputs: "run: run directory; every *.bam in it is processed (one sub-folder per library, e.g. alignments_libA/, with params.recursive = true). Its name is the run_id. samples (optional): only the BAMs named after one of these IDs (<ID>.bam, exact name) are processed (each ID must match a BAM)."
 		references: "genome: reference fasta the BAMs are aligned on, scanned by msisensor-pro scan; pro_list (optional): already generated scan list of genome, skips the scan; bed_panel (optional): panel BED (plain BED, no track line, e.g. *.amplicons.bed), analysis restricted to its microsatellites; bed_roi (optional): classic MSI markers (BAT26, NR21, ...), highlighted in the reports."
 		params: "threads: msisensor-pro pro -b (threads per BAM); coverage_threshold: msisensor-pro pro -c (msisensor-pro's own default: 15 WGS, 20 WXS); recursive: also look for BAMs in the run directory's sub-folders (one per library); p_process (reports only): min_reads, a site counts (% unstable, site status) only with >= this many reads, pval_cutoff, a site is unstable when its p-value is above this, sample_na_fraction, sample status NA when more than this fraction of the loci listed on its sample page are NA or MSU, and consensus_roi_cutoff, sample status MSI when at least this many ROI markers are unstable in consensus."
 		msisensorpro_container: "msisensor-pro image [params/install.json: apptainer-recipes/msisensor-pro-1.3.0.sif]; file:///...sif on slurm_apptainer."
@@ -297,7 +297,7 @@ workflow msi_detection {
 
 task find_bams {
 	meta {
-		description: "List every *.bam of input_dir (except those whose name starts with one of exclude_prefixes; with include_samples, only those whose name contains one of them) with its index, library folder and sample name, as paths relative to input_dir (the caller rebuilds them from its own input_dir value)."
+		description: "List every *.bam of input_dir (except those whose name starts with one of exclude_prefixes; with include_samples, only those named <ID>.bam for one of them) with its index, library folder and sample name, as paths relative to input_dir (the caller rebuilds them from its own input_dir value)."
 		outputs: {
 			bams: "One row per BAM: bam path, index path (both relative to input_dir), library (folder relative to input_dir, \".\" if none), sample name (BAM basename).",
 		}
@@ -331,17 +331,16 @@ task find_bams {
 			cp all_bams.txt bam_list.txt
 		fi
 
-		# Optional selection: only the BAMs whose name contains one of
-		# include_samples (every library); each ID must match a BAM. Empty IDs
-		# are ignored: [] and [""] both keep every BAM.
+		# Optional selection: only the BAMs named <ID>.bam for one of
+		# include_samples (every library), exact name: D22D02350T does not keep
+		# D22D02350T_1.bam. Each ID must match a BAM. Empty IDs are ignored:
+		# [] and [""] both keep every BAM.
 		ids="~{write_lines(include_samples)}"
 		if grep -q . "$ids"; then
 			awk 'NR == FNR { if ($0 != "") ids[$0]; next }
 				{
 					n = split($0, p, "/"); name = p[n]; sub(/\.bam$/, "", name)
-					keep = 0
-					for (id in ids) if (index(name, id)) { found[id]; keep = 1 }
-					if (keep) print
+					if (name in ids) { found[name]; print }
 				}
 				END { for (id in ids) if (!(id in found)) { print "No BAM for sample " id > "/dev/stderr"; err = 1 }; exit err }' \
 				"$ids" bam_list.txt > selected.txt
@@ -368,7 +367,7 @@ task find_bams {
 		input_dir: "Run directory to scan for *.bam."
 		recursive: "Descend into sub-folders (one per library)."
 		exclude_prefixes: "BAMs whose name starts with one of these are left out (controls)."
-		include_samples: "If it holds a non-empty ID: only the BAMs whose name contains one of these IDs are kept; an ID with no BAM fails the task."
+		include_samples: "If it holds a non-empty ID: only the BAMs named <ID>.bam (exact name) for one of these IDs are kept; an ID with no BAM fails the task."
 	}
 
 	requirements {

@@ -6,8 +6,8 @@ Writes the params JSON of the given runs for BASH.sprocket.batch.sh: for each
 run, <output-dir>/<run>_params.json = copy of --template with
 "msi_detection.inputs".run = <bams-dir>/<run> (which must hold at least one
 *.bam) and, when sample IDs are given for the run, "msi_detection.inputs".samples
-= those IDs (the workflow then only analyses the BAMs whose name contains one
-of them, every library). The same run name can be in several groups
+= those IDs (the workflow then only analyses the BAMs named <ID>.bam, exact name,
+every library). The same run name can be in several groups
 (input/colon-msi, input/endo-mss...): bams-dir picks the group.
 
     make_configs.py BAMS_DIR [RUN ...] [--runs-file TXT] --output-dir DIR [--template JSON]
@@ -24,7 +24,7 @@ comments ignored), added to the runs given on the command line:
     Run171_Juno  C22D03587T      columns separated by tabs or spaces)
 
 A run with at least one sample ID only gets its IDs; each ID must match a BAM
-of the run (name containing it), checked here before the workflow.
+of the run (<ID>.bam, exact name), checked here before the workflow.
 
 --output-dir (required) is created if needed. Existing params JSON are
 overwritten. Exits 1 when a run has no BAM or a sample ID no BAM (the other
@@ -93,7 +93,7 @@ def main():
             logger.error(f"{run}: no BAM in {bam_dir}")
             failed.append(run)
             continue
-        missing = [s for s in samples if not any(s in name for name in bam_names)]
+        missing = [s for s in samples if s not in bam_names]
         if missing:
             logger.error(f"{run}: no BAM for sample(s) {', '.join(missing)} in {bam_dir}")
             failed.append(run)
