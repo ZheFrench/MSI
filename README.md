@@ -119,11 +119,6 @@ chr14	23652317	23652397	NR21	0	+
 | `LOCKER_MSI` | MSI locker (runs already taken), created if missing |
 
 
-**crontab** (not in this folder), for example every 30 min with a log:
-
-```sh
-*/30 * * * * /path/to/pipeline-jp/BASH.msi_detection.cron.sh >> /path/to/cron.log 2>&1
-```
 
 ## The cron steps
 
