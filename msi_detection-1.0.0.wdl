@@ -42,12 +42,17 @@ import "module/msisensorpro-1.3.0.wdl" as sensorpro
 import "module/bedtools-2.31.1.wdl" as bedtools
 
 # What to analyse, given in the params JSON as one object:
-#   "msi_detection.inputs": {"run": "<run directory>", "samples": ["<ID>", ...]}
+#   "msi_detection.inputs": {"run": "<run directory>", "samples": ["<ID>", ...],
+#                            "source_run": "<sequencing run name>"}
 # (a Directory: the engine mounts it in the tasks that use it). samples is
 # optional: without it, every BAM of the run (but the controls) is analysed.
+# source_run is optional (a String, not mounted): the sequencing run the BAMs
+# come from (ADIVAR's run, set by msi_detection_pre_p.py in cron mode; absent
+# in batch mode), only shown in the reports.
 struct InputDirs {
 	Directory run
 	Array[String]? samples
+	String? source_run
 }
 
 # Reference files, given in the params JSON as one object:
@@ -80,7 +85,7 @@ struct RunParams {
 }
 
 # Where results go is not a workflow input: every output stays in sprocket's
-# run folder (the workflow writes nothing outside its tasks). BASH.sprocket.cron.sh
+# run folder (the workflow writes nothing outside its tasks). BASH.msi_detection.cron.sh
 # sets the destinations: -o for sprocket's runs, and the reports folder that
 # `msi_detection_post_p.py index` fills after each run (adds runs/<run_id>/,
 # rebuilds the dashboard of every run). The scan is not redone from one run
@@ -259,6 +264,7 @@ workflow msi_detection {
 		input:
 			container = python_container,
 			run_id = run_id,
+			source_run = inputs.source_run,
 			sample_names = sample_name,
 			libraries = library,
 			bam_paths = bam_path,
@@ -283,12 +289,12 @@ workflow msi_detection {
 	}
 
 	parameter_meta {
-		inputs: "run: run directory; every *.bam in it is processed (one sub-folder per library, e.g. alignments_libA/, with params.recursive = true). Its name is the run_id. samples (optional): only the BAMs named after one of these IDs (<ID>.bam, exact name) are processed (each ID must match a BAM)."
+		inputs: "run: run directory; every *.bam in it is processed (one sub-folder per library, e.g. alignments_libA/, with params.recursive = true). Its name is the run_id. samples (optional): only the BAMs named after one of these IDs (<ID>.bam, exact name) are processed (each ID must match a BAM). source_run (optional): sequencing run the BAMs come from (ADIVAR's run name, e.g. 261003_NB501631_0543_ATESTR157), only shown in the reports."
 		references: "genome: reference fasta the BAMs are aligned on, scanned by msisensor-pro scan; pro_list (optional): already generated scan list of genome, skips the scan; bed_panel (optional): panel BED (plain BED, no track line, e.g. *.amplicons.bed), analysis restricted to its microsatellites; bed_roi (optional): classic MSI markers (BAT26, NR21, ...), highlighted in the reports."
 		params: "threads: msisensor-pro pro -b (threads per BAM); coverage_threshold: msisensor-pro pro -c (msisensor-pro's own default: 15 WGS, 20 WXS); recursive: also look for BAMs in the run directory's sub-folders (one per library); p_process (reports only): min_reads, a site counts (% unstable, site status) only with >= this many reads, pval_cutoff, a site is unstable when its p-value is above this, sample_na_fraction, sample status NA when more than this fraction of the loci listed on its sample page are NA or MSU, and consensus_roi_cutoff, sample status MSI when at least this many ROI markers are unstable in consensus."
-		msisensorpro_container: "msisensor-pro image [params/install.json: apptainer-recipes/msisensor-pro-1.3.0.sif]; file:///...sif on slurm_apptainer."
-		bedtools_container: "bedtools image [params/install.json: apptainer-recipes/bedtools-2.31.1.sif]; file:///...sif on slurm_apptainer."
-		python_container: "Generic python3 + awk image of the python/bash tasks [params/install.json: apptainer-recipes/python-3.12.sif]; the script is not in it."
+		msisensorpro_container: "msisensor-pro image [params/install.json: /media/jp/SSD2/CHU/containers/msisensor-pro-1.3.0.sif]; file:///...sif on slurm_apptainer."
+		bedtools_container: "bedtools image [params/install.json: /media/jp/SSD2/CHU/containers/bedtools-2.31.1.sif]; file:///...sif on slurm_apptainer."
+		python_container: "Generic python3 + awk image of the python/bash tasks [params/install.json: /media/jp/SSD2/CHU/containers/python-MSI-3.12.sif]; the script is not in it."
 		exclude_prefixes: "BAMs whose name starts with one of these are not analysed (controls) [default: TN, TPH]."
 		msi_main_helper: "msi_detection_main_p.py, given to list_to_bed and mark_list as a File [params/install.json: main-scripts/msi_detection_main_p.py]."
 		msi_report_helper: "msi_detection_report_p.py, given to the report task as a File [params/install.json: main-scripts/msi_detection_report_p.py]."
@@ -574,6 +580,7 @@ task report {
 
 	input {
 		String run_id
+		String? source_run
 		# One entry per BAM, in the same order in every array
 		Array[String] sample_names
 		Array[String] libraries
@@ -608,6 +615,7 @@ task report {
 			--pval-cutoff ~{pval_cutoff} \
 			--sample-na-fraction ~{sample_na_fraction} \
 			--consensus-roi-cutoff ~{consensus_roi_cutoff} \
+			~{if defined(source_run) then "--source-run \"" + select_first([source_run]) + "\"" else ""} \
 			~{if defined(roi_correspondence_bed) then "--roi-bed \"" + select_first([roi_correspondence_bed]) + "\"" else ""}
 	>>>
 
@@ -619,6 +627,7 @@ task report {
 		container: "python3 + awk image (python_container)."
 		threads: "CPUs reserved for the task."
 		run_id: "Run name (the run directory's name)."
+		source_run: "Sequencing run the BAMs come from (only recorded in the reports)."
 		sample_names: "Per BAM: sample name (BAM basename)."
 		libraries: "Per BAM: library folder (\".\" if none)."
 		bam_paths: "Per BAM: BAM path (only recorded in the reports)."

@@ -13,8 +13,8 @@ From: python:3.12-slim
     tasks. No pipeline code here: changing the script needs no rebuild.
 
     Usage:
-        apptainer exec python-3.12.sif python3 script.py ...
-        apptainer exec python-3.12.sif awk '...' file
+        apptainer exec python-MSI-3.12.sif python3 script.py ...
+        apptainer exec python-MSI-3.12.sif awk '...' file
 
 %environment
     export LC_ALL=C.UTF-8

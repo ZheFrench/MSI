@@ -894,15 +894,17 @@ def run_data_js_path(run_dir: Path, run_id: str) -> Path:
     return run_dir / f"{run_id}_index_run.js"
 
 
-def write_run_index(run_dir: Path, run_id: str, samples: list, rows_by_sample: dict = None) -> str:
+def write_run_index(run_dir: Path, run_id: str, samples: list, rows_by_sample: dict = None,
+                    source_run: str = None) -> str:
     """Write this run's <run_id>_index_run.html and its one data file,
     <run_id>_index_run.js (window.RUN_DATA): run metadata (run_id, started_at,
-    every (sample, library) entry in "samples") plus the precomputed table.
-    Returns the timestamp used, so the caller can record the same one in the
-    top-level runs manifest."""
+    source_run, every (sample, library) entry in "samples") plus the
+    precomputed table. source_run (the sequencing run the BAMs come from) is
+    null when not given (batch mode). Returns the timestamp used, so the
+    caller can record the same one in the top-level runs manifest."""
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    run_data = {"run_id": run_id, "started_at": generated_at, "samples": samples,
-                "status_rule": sample_status_rule()}
+    run_data = {"run_id": run_id, "started_at": generated_at, "source_run": source_run or None,
+                "samples": samples, "status_rule": sample_status_rule()}
     run_data.update(build_run_table(samples, rows_by_sample))
     write_data_js(run_data_js_path(run_dir, run_id), "RUN_DATA", run_data)
     (run_dir / f"{run_id}_index_run.html").write_text(render_run_index(run_id))
@@ -995,7 +997,7 @@ def report(args) -> None:
     if args.roi_bed:
         logger.info(f"ROI correspondence BED: {args.roi_bed}")
     rows_by_sample = load_sample_library_rows(all_paths, sample_metas, args.roi_bed)
-    started_at = write_run_index(viz_run_dir, run_id, sample_metas, rows_by_sample)
+    started_at = write_run_index(viz_run_dir, run_id, sample_metas, rows_by_sample, args.source_run)
     write_sample_group_indexes(viz_run_dir, run_id, sample_metas, rows_by_sample)
 
     # Only this run's pages: the dashboard (index_msi_*.html/.js, every run)
@@ -1009,6 +1011,8 @@ def main():
 
     p = sub.add_parser("report", help="Generate this run's viz/runs/<run_id>/ pages.")
     p.add_argument("--run-id", required=True)
+    p.add_argument("--source-run", default=None,
+                   help="Sequencing run the BAMs come from (only recorded in the reports; optional).")
     p.add_argument("--samples", required=True, help="samples.tsv written by the workflow.")
     p.add_argument("--genome", required=True, help="Reference fasta (only recorded in the reports).")
     p.add_argument("--viz-output", required=True)

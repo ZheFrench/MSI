@@ -53,7 +53,7 @@ For the picked run, the pipeline reads a single field of its `SampleSheet.csv`: 
 Cron mode, e.g. every 4 hours on Thursdays and Fridays:
 
 ```sh
-0 */4 * * 4,5 /path/to/pipeline-jp/BASH.sprocket.cron.sh >> /path/to/BASH.sprocket.cron.log 2>&1
+0 */4 * * 4,5 /path/to/pipeline-jp/BASH.msi_detection.cron.sh >> /path/to/BASH.msi_detection.cron.log 2>&1
 ```
 
 
@@ -77,7 +77,7 @@ Cron mode, e.g. every 4 hours on Thursdays and Fridays:
 runs that are not in the MSI locker.
 
 ```sh
-# same lockers as LOCKER_ADIVAR / LOCKER_MSI of BASH.sprocket.cron.sh
+# same lockers as LOCKER_ADIVAR / LOCKER_MSI of BASH.msi_detection.cron.sh
 L=/path/to/locker
 ./companion-scripts/make_msi_locker.py --locker-adivar $L/adivar-testNS.json --locker-msi $L/msi-sensor.locker.txt --dry-run   # prints the runs to add
 ./companion-scripts/make_msi_locker.py --locker-adivar $L/adivar-testNS.json --locker-msi $L/msi-sensor.locker.txt
@@ -86,10 +86,10 @@ L=/path/to/locker
 **Edit these files by hand at install:**
 
 - [`params/template.json`](params/template.json): references and thresholds of each run
-- [`params/install.json`](params/install.json): Apptainer images and Python scripts
+- [`params/install.json`](params/install.json): Apptainer images (`/media/jp/SSD2/CHU/containers/*.sif`, the `CONTAINERS_DIR` of the shell scripts; their recipes stay in `apptainer-recipes/*.def`) and Python scripts
 - [`backends.conf/sprocket.cron.toml`](backends.conf/sprocket.cron.toml), [`backends.conf/sprocket.batch.toml`](backends.conf/sprocket.batch.toml): sprocket and Slurm settings of each mode (same settings, one call cache each)
-- [`BASH.sprocket.cron.sh`](BASH.sprocket.cron.sh): folders and lockers of the cron mode
-- finally, edit the crontab, to launch `BASH.sprocket.cron.sh` 
+- [`BASH.msi_detection.cron.sh`](BASH.msi_detection.cron.sh): folders and lockers of the cron mode
+- finally, edit the crontab, to launch `BASH.msi_detection.cron.sh` 
 
 `params/template.json`: Define a FASTA genome (`genome`), a BED of your panel (`bed_panel`) and a
 BED of the ROI markers (`bed_roi`), the marker name in the 4th column (custom naming), e.g.
@@ -105,50 +105,51 @@ chr13	31722591	31722667	HT17	0	+
 chr14	23652317	23652397	NR21	0	+
 ```
 
-**`BASH.sprocket.cron.sh`** (cron mode)
+**`BASH.msi_detection.cron.sh`** (cron mode)
 
 | Variable | Role |
 |---|---|
-| `WDL_DIR` | this folder |
-| `VIZ` | reports and dashboard (written by `index`) |
-| `WORK` | sprocket's runs (`sprocket/`) and the params JSON (`config/`) |
-| `RUNS_DIR` | parent folder of the sequencing run folders: the cron reads `$RUNS_DIR/<run>/SampleSheet.csv` (`<run>`: name in ADIVAR's locker) |
+| `PIPELINE_DIR` | this folder |
+| `CONTAINERS_DIR` | Apptainer images (`*.sif`) |
+| `SCRATCH_DIR` | scratch folder, where the script runs and everything but the reports is computed: sprocket's runs (`Sprocket/`), the params JSON (`Config/`), the copies of ADIVAR's locker and of the run's sample sheet (`Temp/`) and the call caches (`cache/cron`, `cache/batch`) |
+| `RESULTS_DIR` | final reports folder: `index` copies each run's reports into it and rebuilds the dashboard |
+| `RUNS_DIR` | parent folder of the sequencing run folders: the cron copies `$RUNS_DIR/<run>/bcl2fastq/SampleSheet.csv` (`<run>`: name in ADIVAR's locker) into `$SCRATCH_DIR/Temp/<run>-SampleSheet.csv` and reads only that copy |
 | `BAMS_DIR` | parent folder of the BAM folders, each named after an Experiment Name: the run analysed is `$BAMS_DIR/<Experiment Name>/` |
-| `LOCKER_ADIVAR` | ADIVAR's locker (read only) |
+| `LOCKER_ADIVAR` | ADIVAR's locker (read only): copied at each launch into `$SCRATCH_DIR/Temp/`, the only file the containers read, so that the three jobs see the same state |
 | `LOCKER_MSI` | MSI locker (runs already taken), created if missing |
 
 
 **crontab** (not in this folder), for example every 30 min with a log:
 
 ```sh
-*/30 * * * * /path/to/pipeline-jp/BASH.sprocket.cron.sh >> /path/to/cron.log 2>&1
+*/30 * * * * /path/to/pipeline-jp/BASH.msi_detection.cron.sh >> /path/to/cron.log 2>&1
 ```
 
 ## The cron steps
 
 
-`BASH.sprocket.cron.sh` (cron) first runs `msi_detection_pre_p.py` three times, each container
+`BASH.msi_detection.cron.sh` (cron) first runs `msi_detection_pre_p.py` three times, each container
 mounting only what that step reads:
 
-1. `--print-run` (job `msi-pick_run`; the two lockers): prints the run finished by ADIVAR and not yet
+1. `--print-run` (job `msi-pick_run`; the copy of ADIVAR's locker and the MSI locker): prints the run finished by ADIVAR and not yet
    in the MSI locker;
-2. `--print-experiment` (job `msi-experiment`; + that run's `$RUNS_DIR/<run>/SampleSheet.csv`): prints
+2. `--print-experiment` (job `msi-experiment`; + the copy of that run's sample sheet, `$SCRATCH_DIR/Temp/<run>-SampleSheet.csv`, given as `--samplesheet`): prints
    the Experiment Name of its `[Header]`, the name of its BAM folder;
 3. without option (job `msi-pre_process`; + that run's `$BAMS_DIR/<Experiment Name>/`, the MSI
-   locker and `$WORK/config/` writable): writes its params JSON in `$WORK/config/` and adds the run
+   locker and `$SCRATCH_DIR/Config/` writable): writes its params JSON in `$SCRATCH_DIR/Config/` and adds the run
    to the locker.
 
-Neither the whole `$RUNS_DIR` nor the whole `$BAMS_DIR` is mounted. A sample sheet without
+`$RUNS_DIR` is never mounted (the sample sheet is copied by the script, on the host), nor the whole `$BAMS_DIR`. A sample sheet without
 Experiment Name or a missing BAM folder stops the script before the run is locked (retried at the next launch).
 Then both scripts, for each params JSON:
 
-1. sets the destinations `VIZ` (reports folder) and `WORK` (sprocket's runs), created if needed:
-   hardcoded in `BASH.sprocket.cron.sh`.
+1. sets the destinations `RESULTS_DIR` (final reports folder) and `SCRATCH_DIR` (sprocket's runs), created if needed:
+   hardcoded in `BASH.msi_detection.cron.sh`.
 2. runs `sprocket run -s -c $SPROCKET_CONFIG` (`backends.conf/sprocket.cron.toml` / `sprocket.batch.toml`) in
-   `$WORK/sprocket/runs/msi_detection/<timestamp>/`, one folder per task;
-3. runs `msi_detection_post_p.py index` as a Slurm job (`srun`, in `python-3.12.sif`): copies the run's
-   `viz/runs/<run_id>/` into `$VIZ/runs/` and rebuilds the dashboard from every
-   `$VIZ/runs/*/` (`index_msi_run.js`, `index_msi_sample.js`; the two `.html` are written once,
+   `$SCRATCH_DIR/Sprocket/runs/msi_detection/<timestamp>/`, one folder per task;
+3. runs `msi_detection_post_p.py index` as a Slurm job (`srun`, in `python-MSI-3.12.sif`): copies the run's
+   `viz/runs/<run_id>/` into `$RESULTS_DIR/runs/` and rebuilds the dashboard from every
+   `$RESULTS_DIR/runs/*/` (`index_msi_run.js`, `index_msi_sample.js`; the two `.html` are written once,
    only rewritten if their template changes).
 
 The workflow itself never writes outside its tasks: the dashboard covers every run, a state that
@@ -208,24 +209,24 @@ The genome, panel and ROI must use the same build as the BAMs (e.g. GRCh37 + `RO
 
 ## Outputs
 
-Two main folders, `VIZ` and `WORK`:
+Two main folders, `RESULTS_DIR` and `SCRATCH_DIR`:
 
-- `VIZ`: the HTML reports and the all-runs dashboard, the folder to open (described first below);
-- `WORK`: sprocket's runs, with every task's files and logs (tree at the end of this section).
-  The call cache is elsewhere, in `cache_dir` of `backends.conf/sprocket.cron.toml` (cron) or
-  `sprocket.batch.toml` (batch): one cache per mode.
+- `RESULTS_DIR`: the HTML reports and the all-runs dashboard, the folder to open (described first below);
+- `SCRATCH_DIR`: sprocket's runs, with every task's files and logs (tree at the end of this section),
+  and the call caches, `cache_dir` of `backends.conf/sprocket.cron.toml` (cron, `cache/cron`) and
+  `sprocket.batch.toml` (batch, `cache/batch`): one cache per mode.
 
 `ta03_report` returns `viz/` as a `Directory` output, in its folder of the sprocket run:
 
 ```text
-$WORK/sprocket/runs/msi_detection/<timestamp>/calls/ta03_report/attempts/0/work/viz/
+$SCRATCH_DIR/Sprocket/runs/msi_detection/<timestamp>/calls/ta03_report/attempts/0/work/viz/
 ```
 
-`index` then copies its `runs/<run_id>/` to `$VIZ` and
+`index` then copies its `runs/<run_id>/` to `$RESULTS_DIR`, adds the run's msisensor-pro `_all` files to it, and
 builds the dashboard there:
 
 ```text
-<VIZ>/
+<RESULTS_DIR>/
 ├── index_msi_run.html              all runs (written once)
 ├── index_msi_run.js                its data, rewritten by each index
 ├── index_msi_sample.html           all samples of all runs (written once)
@@ -235,7 +236,10 @@ builds the dashboard there:
     │   ├── Run154_Juno_index_run.html     
     │   ├── Run154_Juno_index_run.js
     │   ├── NICK_index_sample.html    
-    │   └── NICK_index_sample.js
+    │   ├── NICK_index_sample.js
+    │   └── Raw/                    every BAM's msisensor-pro _all, <library>_<sample>_all
+    │       ├── libA_NICK_all
+    │       └── libB_NICK_all
     └── Run171_Juno/
         ├── Run171_Juno_index_run.html
         ├── Run171_Juno_index_run.js
@@ -245,17 +249,18 @@ builds the dashboard there:
         └── BOB_index_sample.js
 ```
 
-The raw msisensor-pro outputs are not copied: they stay in each `ta02_sensorpro_pro` folder of the
-sprocket run (`_all` and `_unstable` listed in `outputs.json`); 
+Of the raw msisensor-pro outputs, only the `_all` files are copied (in `runs/<run_id>/Raw/`, as
+`<library>_<sample>_all`, the same sample name being in every library): the others (`_unstable`, `_dis`) stay in each
+`ta02_sensorpro_pro` folder of the sprocket run (`_all` and `_unstable` listed in `outputs.json`).
 
 When every call came from the cache, `outputs.json` points to
-the run that computed them, possibly in another `WORK`.
+the run that computed them.
 
-sprocket's work folder, `WORK`:
+sprocket's work folder, in `SCRATCH_DIR`:
 
 ```text
-$WORK/
-└── sprocket/
+$SCRATCH_DIR/
+└── Sprocket/
     ├── .lock                                   sprocket's lock
     ├── sprocket.db                             sprocket's database (runs, index)
     ├── index/
@@ -295,23 +300,23 @@ are in the run that computed them.
 ## Companion scripts
 
 Helper scripts around the workflow, in `companion-scripts/`. The `BASH.*.sh` launchers run their
-python script as a Slurm job (`srun`) in `python-3.12.sif`;
+python script as a Slurm job (`srun`) in `python-MSI-3.12.sif`;
 
 | Script | Mode | Inputs | What it does |
 |---|---|---|---|
 | [`make_msi_locker.py`](companion-scripts/make_msi_locker.py) | cron, before the first launch | `--locker-adivar` ADIVAR's locker JSON, `--locker-msi` MSI locker (text, created if missing), `--dry-run` | Adds every run already finished by ADIVAR to the MSI locker |
 | [`BASH.make_configs.sh`](companion-scripts/BASH.make_configs.sh) → [`make_configs.py`](companion-scripts/make_configs.py) | batch, before | `BAMS_DIR` group folder of BAM folders, `RUNS_FILE` runs file (run, or run + sample ID per line), `OUTPUT_DIR` | Writes one `<run>_params.json` per run of a runs file (optionally restricted to some samples); runs without BAM go to `failed-runs.txt` |
-| [`BASH.sprocket.batch.sh`](companion-scripts/BASH.sprocket.batch.sh) | batch | `CONFIG_DIR` folder of params JSON, `VIZ` reports folder, `WORK` sprocket's runs | Runs the workflow on every params JSON of a folder, then rebuilds the dashboard |
-| [`BASH.export_tsv.sh`](companion-scripts/BASH.export_tsv.sh) → [`export_tsv.py`](companion-scripts/export_tsv.py) | batch, after | `VIZ` reports folder (read only), `OUTPUT_DIR` where the TSV goes | Exports a reports folder as a TSV, one line per sample (`results_msi_<date>.tsv`) |
+| [`BASH.msi_detection.batch.sh`](companion-scripts/BASH.msi_detection.batch.sh) | batch | `CONFIGS_DIR` folder of params JSON, `RESULTS_DIR` final reports folder (sprocket's runs: `$SCRATCH_DIR/Sprocket/`) | Runs the workflow on every params JSON of a folder, then rebuilds the dashboard |
+| [`BASH.export_tsv.sh`](companion-scripts/BASH.export_tsv.sh) → [`export_tsv.py`](companion-scripts/export_tsv.py) | batch, after | `RESULTS_DIR` reports folder (read only), `OUTPUT_DIR` where the TSV goes | Exports a reports folder as a TSV, one line per sample (`results_msi_<date>.tsv`) |
 
 ```sh
 ./companion-scripts/make_msi_locker.py --locker-adivar ADIVAR_JSON --locker-msi MSI_TXT [--dry-run]
 ./companion-scripts/BASH.make_configs.sh BAMS_DIR RUNS_FILE OUTPUT_DIR
-./companion-scripts/BASH.sprocket.batch.sh CONFIG_DIR VIZ WORK  # in screen / tmux
-./companion-scripts/BASH.export_tsv.sh VIZ OUTPUT_DIR
+./companion-scripts/BASH.msi_detection.batch.sh CONFIGS_DIR RESULTS_DIR  # in screen / tmux
+./companion-scripts/BASH.export_tsv.sh RESULTS_DIR OUTPUT_DIR
 ```
 
-**Note:** `BASH.sprocket.batch.sh` runs sprocket with its own config,
+**Note:** `BASH.msi_detection.batch.sh` runs sprocket with its own config,
 [`backends.conf/sprocket.batch.toml`](backends.conf/sprocket.batch.toml), not the cron's
 `sprocket.cron.toml`: same settings, but a different `cache_dir`, so that the batch and cron call
 caches stay apart (a batch never reuses a cron result, nor the reverse).

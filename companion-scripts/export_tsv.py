@@ -2,24 +2,24 @@
 """
 export_tsv.py
 
-Exports the results of a reports folder (VIZ of BASH.sprocket.batch.sh or
-BASH.sprocket.cron.sh) as a TSV table, one line per sample, from the dashboard data
+Exports the results of a reports folder (RESULTS_DIR of BASH.msi_detection.batch.sh or
+BASH.msi_detection.cron.sh) as a TSV table, one line per sample, from the dashboard data
 the workflow and msi_detection_post_p.py index already computed (nothing is
 recomputed):
 
     run_id, sample_name, call, consensus_roi, consensus_total, pct_region_unstable
-        - VIZ/index_msi_sample.js
+        - RESULTS_DIR/index_msi_sample.js
     <lib>_unstable_region_count, <lib>_unstable_roi_count (per library)
-        - VIZ/index_msi_sample.js
+        - RESULTS_DIR/index_msi_sample.js
     <marker>, <lib>_<marker>_pro_p, <lib>_<marker>_cov (per ROI marker: BAT25...)
-        - VIZ/runs/<run_id>/<sample>_index_sample.js: the marker's site_status
+        - RESULTS_DIR/runs/<run_id>/<sample>_index_sample.js: the marker's site_status
           (same for all libraries), then its pro_p and CovReads in each library
 
 Empty cell: no value (no consensus, marker not covered...).
 
-    export_tsv.py --viz VIZ [--output-dir DIR | --output results.tsv]
+    export_tsv.py --viz RESULTS_DIR [--output-dir DIR | --output results.tsv]
 
-Written in --output-dir (default: VIZ) as results_msi_<date>.tsv (date:
+Written in --output-dir (default: RESULTS_DIR) as results_msi_<date>.tsv (date:
 YYYY-MM-DD_HH-MM-SS, as the params JSON of msi_detection_pre_p.py): each
 export is a new file. --output gives the file itself instead.
 """
@@ -66,7 +66,7 @@ def read_markers(viz_dir: Path, run_id: str, sample_name: str) -> dict:
 def main():
     parser = argparse.ArgumentParser(description="Results of a reports folder as a TSV table, one line per sample.")
     parser.add_argument("--viz", type=Path, required=True, help="Reports folder (holds index_msi_sample.js).")
-    parser.add_argument("--output-dir", type=Path, help="Where results_msi_<date>.tsv is written (default: VIZ).")
+    parser.add_argument("--output-dir", type=Path, help="Where results_msi_<date>.tsv is written (default: RESULTS_DIR).")
     parser.add_argument("--output", type=Path, help="TSV written, instead of --output-dir/results_msi_<date>.tsv.")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")

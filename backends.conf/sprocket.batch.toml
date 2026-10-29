@@ -23,4 +23,4 @@ executable = "apptainer"
 cache = "on"
 digests = "strongish"
 # Call cache of the batch mode (sprocket.cron.toml: the cron mode one).
-cache_dir = "/media/jp/SSD2/CHU/test/work/cache/batch"
+cache_dir = "/media/jp/SSD2/CHU/Scratch/MSI/Batch-1/Cache"

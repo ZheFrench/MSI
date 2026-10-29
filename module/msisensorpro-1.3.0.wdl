@@ -27,7 +27,6 @@ task scan {
 	meta {
 		author: "Jean-Philippe Villemin"
 		email: "jeanphilipe.villemin(at)chu-montpellier.fr"
-		version: "0.1.0"
 		date: "2026-10-05"
 		description: "msisensor-pro scan: every microsatellite site of a reference genome."
 		outputs: {
@@ -72,7 +71,6 @@ task pro {
 	meta {
 		author: "Jean-Philippe Villemin"
 		email: "jeanphilipe.villemin(at)chu-montpellier.fr"
-		version: "0.1.0"
 		date: "2026-10-05"
 		description: "msisensor-pro pro: MSI scoring of a tumor-only BAM. A msisensor-pro failure fails the task."
 		outputs: {

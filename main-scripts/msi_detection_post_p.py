@@ -9,14 +9,15 @@ run's report), whose page code it reuses (import: both scripts sit in
 main-scripts/).
 
     index        --viz DIR [--run-outputs outputs.json]
-        Copies the run's runs/<run_id>/ into DIR/runs/, then rebuilds the
-        dashboard from every DIR/runs/*/:
+        Copies the run's runs/<run_id>/ into DIR/runs/, with its msisensor-pro
+        _all files, then rebuilds the dashboard from every DIR/runs/*/:
 
+    DIR/runs/<run_id>/Raw/<library>_<sample>_all  - every BAM's _all (e.g. Raw/libA_D22D02209T_all)
     DIR/index_msi_run.js, index_msi_sample.js     - rewritten (all runs, all samples)
     DIR/index_msi_run.html, index_msi_sample.html - written once (only if the template changed)
 
-Usage (BASH.sprocket.cron.sh / BASH.sprocket.batch.sh, after each run):
-    msi_detection_post_p.py index --viz VIZ --run-outputs <run>/outputs.json
+Usage (BASH.msi_detection.cron.sh / BASH.msi_detection.batch.sh, after each run):
+    msi_detection_post_p.py index --viz RESULTS_DIR --run-outputs <run>/outputs.json
 """
 
 import argparse
@@ -30,11 +31,14 @@ from pathlib import Path
 # whatever the current directory or python's -I/-P flags.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from msi_detection_report_p import (HEAD_LINKS, OUTPUT_INDEX_FILENAME, REPORT_CSS,  # noqa: E402
-                                  RUNS_DIRNAME, logger, run_data_js_path, write_data_js)
+                                  RUNS_DIRNAME, extract_library_suffix, logger,
+                                  run_data_js_path, write_data_js)
 
 # Dashboard data files, in the reports folder
 RUNS_DATA_FILENAME = "index_msi_run.js"
 SAMPLES_DATA_FILENAME = "index_msi_sample.js"
+# Copy of the run's msisensor-pro _all files, in its runs/<run_id>/
+RAW_DIRNAME = "Raw"
 
 
 def read_data_js(js_path: Path):
@@ -69,7 +73,7 @@ __HEAD_LINKS__
   <div class="table-panel">
     <div class="table-scroll">
       <table class="index-table">
-        <thead><tr><th>Run</th><th>Started</th><th class="num"># Samples</th></tr></thead>
+        <thead><tr><th>Run</th><th>Source</th><th>Started</th><th class="num"># Samples</th></tr></thead>
         <tbody id="tbody"></tbody>
       </table>
     </div>
@@ -83,14 +87,18 @@ __HEAD_LINKS__
   var runs = window.RUNS_DATA || [];
   function render(filterText){
         var f = (filterText||"").trim().toLowerCase();
-        var rows = runs.filter(function(r){ return !f || r.run_id.toLowerCase().indexOf(f)!==-1; });
+        // Filter on the run or its source run (absent in batch mode: "—").
+        var rows = runs.filter(function(r){
+          return !f || (r.run_id + " " + (r.source_run||"")).toLowerCase().indexOf(f)!==-1;
+        });
         var body = document.getElementById("tbody");
         if (!rows.length){
-          body.innerHTML = '<tr class="empty-row"><td colspan="3">No run yet.</td></tr>';
+          body.innerHTML = '<tr class="empty-row"><td colspan="4">No run yet.</td></tr>';
           return;
         }
         body.innerHTML = rows.map(function(r){
           return '<tr><td><a href="./__RUNS_DIR__/'+r.run_id+'/'+r.run_id+'_index_run.html">'+r.run_id+'</a></td>'
+            +(r.source_run ? '<td class="mono" title="'+r.source_run+'">'+r.source_run+'</td>' : '<td><span class="lib-empty">—</span></td>')
             +'<td>'+r.started_at+'</td>'
             +'<td class="num tabular">'+r.samples_count+'</td></tr>';
         }).join("");
@@ -107,13 +115,15 @@ __HEAD_LINKS__
             .replace("__RUNS_DIR__", RUNS_DIRNAME))
 
 
-def _run_summary(run_id: str, started_at: str, samples: list) -> dict:
+def _run_summary(run_id: str, started_at: str, samples: list, source_run: str = None) -> dict:
     """One index_msi_run.js entry for a run, from its sample_metas (or the
     "samples" list stored in that run's own <run_id>_index_run.js). Counts distinct
     samples, not (sample, library) entries: a sample with 2 libraries must
-    still count as 1 sample here, not 2."""
+    still count as 1 sample here, not 2. source_run: null when the run had
+    none (batch mode, or a run reported before it existed)."""
     return {
         "run_id": run_id,
+        "source_run": source_run,
         "started_at": started_at,
         "samples_count": len({s["sample_name"] for s in samples}),
     }
@@ -137,7 +147,7 @@ def rebuild_runs_manifest(viz_dir: Path) -> list:
             except (json.JSONDecodeError, IndexError):
                 continue
             runs.append(_run_summary(run_data["run_id"], run_data.get("started_at", ""),
-                                     run_data.get("samples", [])))
+                                     run_data.get("samples", []), run_data.get("source_run")))
     runs.sort(key=lambda r: r["started_at"], reverse=True)
     write_data_js(viz_dir / RUNS_DATA_FILENAME, "RUNS_DATA", runs)
     return runs
@@ -306,10 +316,34 @@ __HEAD_LINKS__
 # index: add a run's pages to the reports folder, rebuild the dashboard
 # ---------------------------------------------------------------------------
 
+def copy_msisensor_all(outputs: dict, run_dest: Path) -> None:
+    """Copy every BAM's msisensor-pro _all (outputs' msisensorpro_all) into
+    run_dest/Raw/, as <library>_<sample>_all (library label as on the pages, e.g.
+    libA_D22D02209T_all; <sample>_all for a BAM without library folder). The
+    same sample name exists in every library, so each _all gets its library
+    from the report's samples.tsv (next to its viz/: one line per BAM, sample
+    and library first, in the same order as msisensorpro_all, both following
+    the workflow's scatter)."""
+    all_files = [Path(p) for p in outputs["msi_detection.msisensorpro_all"]]
+    samples_tsv = Path(outputs["msi_detection.report_viz"]).parent / "samples.tsv"
+    rows = [line.split("\t") for line in samples_tsv.read_text().splitlines() if line]
+    if len(rows) != len(all_files):
+        raise SystemExit(f"{samples_tsv}: {len(rows)} BAM(s), {len(all_files)} _all file(s) in outputs.json")
+    for (sample, library, *_), all_file in zip(rows, all_files):
+        if all_file.name != f"{sample}_all":
+            raise SystemExit(f"{all_file}: not the _all of {sample} ({samples_tsv} out of step with outputs.json)")
+        prefix = f"{extract_library_suffix(library)}_" if library != "." else ""
+        raw_dir = run_dest / RAW_DIRNAME
+        raw_dir.mkdir(exist_ok=True)
+        shutil.copy(all_file, raw_dir / f"{prefix}{all_file.name}")
+    logger.info(f"Added {len(all_files)} _all file(s) to {run_dest / RAW_DIRNAME}")
+
+
 def index(args) -> None:
     """Add this run's viz/runs/<run_id>/ (copied from the ta03_report call
     folder named by --run-outputs, so the sprocket run stays complete) to the
-    reports folder, then rebuild the dashboard from every viz/runs/*/: index_msi_run.js and
+    reports folder, with its msisensor-pro _all files (copy_msisensor_all),
+    then rebuild the dashboard from every viz/runs/*/: index_msi_run.js and
     index_msi_sample.js are rewritten, index_msi_run.html and
     index_msi_sample.html only when their template changed. Re-runnable at
     any time (e.g. after deleting a run folder)."""
@@ -326,6 +360,7 @@ def index(args) -> None:
                 logger.info(f"Replacing {dest}")
             shutil.copytree(run_dir, dest)
             logger.info(f"Added {dest}")
+            copy_msisensor_all(outputs, dest)
 
     runs = rebuild_runs_manifest(viz_dir)
     ensure_output_index_page(viz_dir)
@@ -338,7 +373,7 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("index", help="Add a run's pages to the reports folder and rebuild the dashboard.")
-    p.add_argument("--viz", required=True, help="Reports folder (VIZ of BASH.sprocket.cron.sh).")
+    p.add_argument("--viz", required=True, help="Reports folder (RESULTS_DIR of BASH.msi_detection.cron.sh).")
     p.add_argument("--run-outputs", default=None,
                    help="outputs.json of a run: its report_viz runs/<run_id>/ is copied into --viz/runs/.")
 

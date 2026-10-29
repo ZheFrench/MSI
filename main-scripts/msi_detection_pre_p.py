@@ -12,13 +12,15 @@ with. Steps:
        none; more is an error (exit 1, nothing written). --runs-dir is not
        listed.
     3. For each run of the difference, the Experiment Name of the [Header]
-       of its <runs-dir>/<run>/SampleSheet.csv is the only link to its BAMs:
+       of its <runs-dir>/<run>/bcl2fastq/SampleSheet.csv is the only link to its BAMs:
        the folder <bams-dir>/<Experiment Name>/, which must hold at least
        one *.bam (the workflow's find_bams lists them all). The header is
        not checked otherwise: the run comes from ADIVAR's locker.
     4. <output-dir>/<date>-<run>-<Experiment Name>.json (date:
        YYYY-MM-DD_HH-MM-SS): copy of --template with
-       "msi_detection.inputs".run = <bams-dir>/<Experiment Name>.
+       "msi_detection.inputs".run = <bams-dir>/<Experiment Name> and
+       "msi_detection.inputs".source_run = <run> (shown in the reports'
+       run list).
     5. The run is added to --locker-msi as soon as its params JSON is
        written, before it runs: a later launch (cron) never takes it again,
        nor is a failed run retried (remove its line to rerun it).
@@ -35,7 +37,7 @@ the difference could not get its params JSON.
 
 Steps 1-2 only (reads the two lockers, writes nothing): prints the run to
 analyse (nothing: none), so that the caller can give the container only its
-<runs-dir>/<run>/SampleSheet.csv.
+<runs-dir>/<run>/bcl2fastq/SampleSheet.csv.
 
     msi_detection_pre_p.py --print-experiment --runs-dir RUNS \\
         --locker-adivar adivar-testNS.json --locker-msi msi-sensor.locker.txt
@@ -44,6 +46,9 @@ Steps 1-3 without the BAM folder (reads the lockers and the run's sample
 sheet, writes nothing): prints the run's Experiment Name (nothing: no run),
 so that the caller can give the container only <bams-dir>/<Experiment Name>/.
 Exits 1 when the sample sheet or its Experiment Name is missing.
+
+--samplesheet FILE (instead of --runs-dir): the run's sample sheet itself,
+e.g. the copy BASH.msi_detection.cron.sh makes in its scratch.
 """
 
 import argparse
@@ -56,6 +61,8 @@ from pathlib import Path
 
 # status of a run ADIVAR has finished, in its locker
 ADIVAR_DONE = 3
+# sample sheet of a run, relative to its <runs-dir>/<run>/ folder
+SAMPLESHEET = Path("bcl2fastq") / "SampleSheet.csv"
 
 logger = logging.getLogger("MSI-pre-processing")
 
@@ -110,41 +117,46 @@ def read_samplesheet_header(path: Path) -> dict:
     return header
 
 
-def read_experiment(run_dir: Path) -> str:
-    """Experiment Name of run_dir's sample sheet header (the name of its BAM
+def run_sheet(args, run: str) -> Path:
+    """The run's sample sheet: --samplesheet when given (a copy, e.g. the
+    cron's), <runs-dir>/<run>/bcl2fastq/SampleSheet.csv otherwise."""
+    return Path(args.samplesheet) if args.samplesheet else Path(args.runs_dir) / run / SAMPLESHEET
+
+
+def read_experiment(run: str, sheet: Path) -> str:
+    """Experiment Name of the run's sample sheet header (the name of its BAM
     folder); None (error logged) when the sample sheet or its Experiment Name
     is missing."""
-    sheet = run_dir / "SampleSheet.csv"
     if not sheet.is_file():
-        logger.error(f"{run_dir.name}: no {sheet}")
+        logger.error(f"{run}: no {sheet}")
         return None
     experiment = read_samplesheet_header(sheet).get("Experiment Name")
     if not experiment:
-        logger.error(f"{run_dir.name}: no Experiment Name in {sheet}")
+        logger.error(f"{run}: no Experiment Name in {sheet}")
         return None
     return experiment
 
 
-def make_params(run_dir: Path, bams_dir: Path, template: dict, output_dir: Path) -> Path:
-    """Checks run_dir's Experiment Name and BAM folder, writes its params
-    JSON and returns its path; None (error logged) when the run cannot be
-    analysed."""
-    experiment = read_experiment(run_dir)
+def make_params(run: str, sheet: Path, bams_dir: Path, template: dict, output_dir: Path) -> Path:
+    """Checks the run's Experiment Name (from its sample sheet) and BAM
+    folder, writes its params JSON and returns its path; None (error logged)
+    when the run cannot be analysed."""
+    experiment = read_experiment(run, sheet)
     if not experiment:
         return None
-    sheet = run_dir / "SampleSheet.csv"
 
     bam_dir = bams_dir / experiment
     bam_count = sum(1 for _ in bam_dir.rglob("*.bam")) if bam_dir.is_dir() else 0
     if not bam_count:
-        logger.error(f"{run_dir.name}: no BAM in {bam_dir} (Experiment Name of {sheet})")
+        logger.error(f"{run}: no BAM in {bam_dir} (Experiment Name of {sheet})")
         return None
-    logger.info(f"{run_dir.name}: {experiment}, {bam_count} BAM(s) in {bam_dir}")
+    logger.info(f"{run}: {experiment}, {bam_count} BAM(s) in {bam_dir}")
 
     params = json.loads(json.dumps(template))
     params["msi_detection.inputs"]["run"] = str(bam_dir.resolve())
+    params["msi_detection.inputs"]["source_run"] = run
     date = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    output = output_dir / f"{date}-{run_dir.name}-{experiment}.json"
+    output = output_dir / f"{date}-{run}-{experiment}.json"
     output.write_text(json.dumps(params, indent=4) + "\n")
     return output
 
@@ -155,7 +167,9 @@ def main():
                         help="Only print the run to analyse (steps 1-2): the other options but the lockers are not needed.")
     parser.add_argument("--print-experiment", action="store_true",
                         help="Only print the run's Experiment Name (its BAM folder): needs --runs-dir and the lockers.")
-    parser.add_argument("--runs-dir", help="Folder holding one sub-folder per run (its SampleSheet.csv).")
+    parser.add_argument("--runs-dir", help="Folder holding one sub-folder per run (its bcl2fastq/SampleSheet.csv).")
+    parser.add_argument("--samplesheet",
+                        help="The run's sample sheet itself (e.g. a copy), instead of the one of --runs-dir.")
     parser.add_argument("--locker-adivar", required=True,
                         help="ADIVAR's locker ({run: {\"status\": N}}); status 3 = finished by ADIVAR. Read only.")
     parser.add_argument("--locker-msi", required=True,
@@ -166,7 +180,8 @@ def main():
     args = parser.parse_args()
     if args.print_run and args.print_experiment:
         parser.error("--print-run and --print-experiment are exclusive")
-    needed = [] if args.print_run else ["runs_dir"] if args.print_experiment else ["runs_dir", "bams_dir", "template", "output_dir"]
+    sheet_opt = [] if args.samplesheet else ["runs_dir"]
+    needed = [] if args.print_run else sheet_opt if args.print_experiment else sheet_opt + ["bams_dir", "template", "output_dir"]
     missing = [opt for opt in needed if not getattr(args, opt)]
     if missing:
         parser.error(f"required here: {', '.join('--' + m.replace('_', '-') for m in missing)}")
@@ -188,7 +203,7 @@ def main():
         print(todo[0])
         return
     if args.print_experiment:
-        experiment = read_experiment(Path(args.runs_dir) / todo[0])
+        experiment = read_experiment(todo[0], run_sheet(args, todo[0]))
         if not experiment:
             sys.exit(1)
         print(experiment)
@@ -196,12 +211,12 @@ def main():
 
     # 3-5. Each run's Experiment Name and BAM folder -> its params JSON,
     # then the run into the MSI locker
-    runs_dir, output_dir = Path(args.runs_dir), Path(args.output_dir)
+    output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     template = json.loads(Path(args.template).read_text())
     failed = []
     for run in todo:
-        output = make_params(runs_dir / run, Path(args.bams_dir), template, output_dir)
+        output = make_params(run, run_sheet(args, run), Path(args.bams_dir), template, output_dir)
         if output:
             lock(Path(args.locker_msi), run)
             print(output)

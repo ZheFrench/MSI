@@ -1,18 +1,7 @@
+# Étape 1 (build) : compilation depuis les sources.
 Bootstrap: docker
 From: ubuntu:24.04
-
-%labels
-    Author jeanphilippe.villemin@chu-montpellier.fr
-    Software msisensor-pro
-    Source https://github.com/xjtu-omics/msisensor-pro
-
-%help
-    Conteneur Apptainer contenant MSIsensor-pro, compilé depuis les sources
-    (https://github.com/xjtu-omics/msisensor-pro).
-
-    Utilisation :
-        apptainer run msisensor-pro.sif msisensor-pro --help
-        apptainer exec msisensor-pro.sif msisensor-pro msi -d ref.list -t tumor.bam -o output
+Stage: build
 
 %post
     export DEBIAN_FRONTEND=noninteractive
@@ -37,13 +26,44 @@ From: ubuntu:24.04
     cd msisensor-pro
     ./INSTALL
 
-    # Installation du binaire dans un répertoire standard du PATH
-    mv binary/msisensor-pro /usr/local/bin/
-    chmod +x /usr/local/bin/msisensor-pro
+# Étape 2 (image finale) : seulement le binaire, sa libhts et les bibliothèques
+# d'exécution ; ni la chaîne de compilation, ni les sources (.git, demo).
+Bootstrap: docker
+From: ubuntu:24.04
+Stage: final
 
-    # Nettoyage
+%files from build
+    /opt/msisensor-pro/binary/msisensor-pro /usr/local/bin/msisensor-pro
+    /opt/msisensor-pro/vendor/htslib-1.11/libhts.so.3 /usr/local/lib/libhts.so.3
+
+%labels
+    Author jeanphilippe.villemin@chu-montpellier.fr
+    Software msisensor-pro
+    Source https://github.com/xjtu-omics/msisensor-pro
+
+%help
+    Conteneur Apptainer contenant MSIsensor-pro, compilé depuis les sources
+    (https://github.com/xjtu-omics/msisensor-pro).
+
+    Utilisation :
+        apptainer run msisensor-pro.sif msisensor-pro --help
+        apptainer exec msisensor-pro.sif msisensor-pro msi -d ref.list -t tumor.bam -o output
+
+%post
+    export DEBIAN_FRONTEND=noninteractive
+
+    # Bibliothèques d'exécution de msisensor-pro et de libhts
+    apt-get update && apt-get install -y --no-install-recommends \
+        libgomp1 \
+        libcurl4t64 \
+        zlib1g \
+        libbz2-1.0 \
+        liblzma5
     apt-get clean
     rm -rf /var/lib/apt/lists/*
+
+    chmod +x /usr/local/bin/msisensor-pro
+    ldconfig
 
 %environment
     export PATH=/usr/local/bin:$PATH

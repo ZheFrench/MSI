@@ -26,7 +26,6 @@ task intersect {
 	meta {
 		author: "Jean-Philippe Villemin"
 		email: "jeanphilipe.villemin(at)chu-montpellier.fr"
-		version: "0.1.0"
 		date: "2026-10-05"
 		description: "bedtools intersect of a with b. Chromosome names are matched literally (chr1 vs 1 gives no overlap)."
 		outputs: {

@@ -2,7 +2,7 @@
 """
 make_configs.py
 
-Writes the params JSON of the given runs for BASH.sprocket.batch.sh: for each
+Writes the params JSON of the given runs for BASH.msi_detection.batch.sh: for each
 run, <output-dir>/<run>_params.json = copy of --template with
 "msi_detection.inputs".run = <bams-dir>/<run> (which must hold at least one
 *.bam) and, when sample IDs are given for the run, "msi_detection.inputs".samples
