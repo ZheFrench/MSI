@@ -28,7 +28,7 @@ The script must stay self-contained (no import of the other scripts): in a
 WDL task it is localized on its own.
 
 Usage (normally only from msi_detection-1.0.0.wdl):
-    sprocket run msi_detection-1.0.0.wdl @<params JSON>
+    java -jar cromwell.jar run msi_detection-1.0.0.wdl -i <inputs JSON>
 """
 
 import argparse
@@ -67,7 +67,7 @@ logger = logging.getLogger("MSI-detection")
 
 
 def setup_logging() -> None:
-    """Configure the module logger: console only (stderr, kept by sprocket in
+    """Configure the module logger: console only (stderr, kept by Cromwell in
     the task's folder)."""
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S")
 

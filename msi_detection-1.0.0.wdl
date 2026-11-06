@@ -1,4 +1,4 @@
-version 1.3
+version 1.1
 
 # MSI-Detection 0.1 - WDL pipelines.
 # Copyright (C) 2026 MoBiDiC
@@ -18,9 +18,9 @@ version 1.3
 
 # Every external tool is wrapped in a
 # module (module/<tool>.wdl, imported below), whose tasks only name their
-# Apptainer image (requirements.container) and call the tool directly: the
-# backend runs it (sprocket slurm_apptainer, on this workstation's single-node
-# Slurm in development, on the cluster in production).
+# Apptainer image (runtime.apptainer) and call the tool directly: the
+# backend runs it (Cromwell, Slurm + Apptainer backend of backends.conf/cromwell.conf,
+# on this workstation's single-node Slurm in development, on the cluster in production).
 # The pure-Python steps are subcommands of two scripts, run in the generic
 # python3 image (python_container): msi_main_helper (msi_detection_main_p.py,
 # list/BED conversions) and msi_report_helper (msi_detection_report_p.py, this
@@ -30,13 +30,13 @@ version 1.3
 #
 # Calls are named after their line on the diagram, t<line><rank>_<step>
 # (a: BAMs, b: msisensor-pro list, c: ROI markers; WDL names can't start
-# with a digit), so sprocket's calls/ folders group the same way:
+# with a digit), so Cromwell's call-*/ folders group the same way:
 #   ta01_find_bams ------------------------------------------------------------.
 #   tb01_sensorpro_scan (or pro_list) -> tb02_list_to_bed                        |
 #     -> [panel] tb03_panel_chrom -> tb04_panel_intersect -> tb05_panel_correspondence -> tb06_mark_list
 #     -> [roi]   tc01_roi_chrom -> tc02_roi_intersect -> tc03_roi_correspondence
 #   scatter: ta02_sensorpro_pro (one per BAM) <--------------------------------'
-#   ta03_report: viz/ as a Directory output (in the run folder)
+#   ta03_report: viz/ as a viz.tar.gz output (WDL 1.1 has no Directory type)
 
 import "module/msisensorpro-1.3.0.wdl" as sensorpro
 import "module/bedtools-2.31.1.wdl" as bedtools
@@ -44,13 +44,14 @@ import "module/bedtools-2.31.1.wdl" as bedtools
 # What to analyse, given in the params JSON as one object:
 #   "msi_detection.inputs": {"run": "<run directory>", "samples": ["<ID>", ...],
 #                            "source_run": "<sequencing run name>"}
-# (a Directory: the engine mounts it in the tasks that use it). samples is
+# (a String: WDL 1.1 has no Directory type; the backend binds the data folders
+# in every container, so the path is the same inside the tasks). samples is
 # optional: without it, every BAM of the run (but the controls) is analysed.
 # source_run is optional (a String, not mounted): the sequencing run the BAMs
 # come from (ADIVAR's run, set by msi_detection_pre_p.py in cron mode; absent
 # in batch mode), only shown in the reports.
 struct InputDirs {
-	Directory run
+	String run
 	Array[String]? samples
 	String? source_run
 }
@@ -84,12 +85,12 @@ struct RunParams {
 	PProcess p_process
 }
 
-# Where results go is not a workflow input: every output stays in sprocket's
+# Where results go is not a workflow input: every output stays in Cromwell's
 # run folder (the workflow writes nothing outside its tasks). BASH.msi_detection.cron.sh
-# sets the destinations: -o for sprocket's runs, and the reports folder that
+# sets the destinations: Cromwell's executions folder, and the reports folder that
 # `msi_detection_post_p.py index` fills after each run (adds runs/<run_id>/,
 # rebuilds the dashboard of every run). The scan is not redone from one run
-# to the next: sprocket's call cache reuses the previous result (same genome
+# to the next: Cromwell's call cache reuses the previous result (same genome
 # and image).
 
 workflow msi_detection {
@@ -107,7 +108,7 @@ workflow msi_detection {
 			roi_correspondence_bed: "Microsatellite sites inside the ROI markers, named ...#<marker> (only with bed_roi).",
 			msisensorpro_all: "Per BAM: msisensor-pro <sample>_all (every evaluated site).",
 			msisensorpro_unstable: "Per BAM: msisensor-pro <sample>_unstable (unstable sites only).",
-			report_viz: "This run's HTML/JS reports, runs/<run_id>/ (added to the reports folder by msi_detection_post_p.py index, which also rebuilds the dashboard).",
+			report_viz: "This run's HTML/JS reports, runs/<run_id>/ as a .tar.gz (added to the reports folder by msi_detection_post_p.py index, which also rebuilds the dashboard).",
 		}
 	}
 
@@ -285,16 +286,16 @@ workflow msi_detection {
 		File? roi_correspondence_bed = tc03_roi_correspondence.bed
 		Array[File] msisensorpro_all = ta02_sensorpro_pro.all
 		Array[File] msisensorpro_unstable = ta02_sensorpro_pro.unstable
-		Directory report_viz = ta03_report.viz
+		File report_viz = ta03_report.viz
 	}
 
 	parameter_meta {
 		inputs: "run: run directory; every *.bam in it is processed (one sub-folder per library, e.g. alignments_libA/, with params.recursive = true). Its name is the run_id. samples (optional): only the BAMs named after one of these IDs (<ID>.bam, exact name) are processed (each ID must match a BAM). source_run (optional): sequencing run the BAMs come from (ADIVAR's run name, e.g. 261003_NB501631_0543_ATESTR157), only shown in the reports."
 		references: "genome: reference fasta the BAMs are aligned on, scanned by msisensor-pro scan; pro_list (optional): already generated scan list of genome, skips the scan; bed_panel (optional): panel BED (plain BED, no track line, e.g. *.amplicons.bed), analysis restricted to its microsatellites; bed_roi (optional): classic MSI markers (BAT26, NR21, ...), highlighted in the reports."
 		params: "threads: msisensor-pro pro -b (threads per BAM); coverage_threshold: msisensor-pro pro -c (msisensor-pro's own default: 15 WGS, 20 WXS); recursive: also look for BAMs in the run directory's sub-folders (one per library); p_process (reports only): min_reads, a site counts (% unstable, site status) only with >= this many reads, pval_cutoff, a site is unstable when its p-value is above this, sample_na_fraction, sample status NA when more than this fraction of the loci listed on its sample page are NA or MSU, and consensus_roi_cutoff, sample status MSI when at least this many ROI markers are unstable in consensus."
-		msisensorpro_container: "msisensor-pro image [params/install.json: /media/jp/SSD2/CHU/containers/msisensor-pro-1.3.0.sif]; file:///...sif on slurm_apptainer."
-		bedtools_container: "bedtools image [params/install.json: /media/jp/SSD2/CHU/containers/bedtools-2.31.1.sif]; file:///...sif on slurm_apptainer."
-		python_container: "Generic python3 + awk image of the python/bash tasks [params/install.json: /media/jp/SSD2/CHU/containers/python-MSI-3.12.sif]; the script is not in it."
+		msisensorpro_container: "msisensor-pro image [params/install.json: msisensor-pro:1.3.0]; <name>:<tag>, run by the backend (backends.conf/cromwell.conf) from <containers dir>/<name>-<tag>.sif."
+		bedtools_container: "bedtools image [params/install.json: bedtools:2.31.1]; <name>:<tag>, run by the backend (backends.conf/cromwell.conf) from <containers dir>/<name>-<tag>.sif."
+		python_container: "Generic python3 + awk image of the python/bash tasks [params/install.json: python-msi:3.12, i.e. python-MSI-3.12.sif]; the script is not in it."
 		exclude_prefixes: "BAMs whose name starts with one of these are not analysed (controls) [default: TN, TPH]."
 		msi_main_helper: "msi_detection_main_p.py, given to list_to_bed and mark_list as a File [params/install.json: main-scripts/msi_detection_main_p.py]."
 		msi_report_helper: "msi_detection_report_p.py, given to the report task as a File [params/install.json: main-scripts/msi_detection_report_p.py]."
@@ -310,7 +311,7 @@ task find_bams {
 	}
 
 	input {
-		Directory input_dir
+		String input_dir
 		Boolean recursive
 		Array[String] exclude_prefixes = []
 		Array[String] include_samples = []
@@ -376,8 +377,9 @@ task find_bams {
 		include_samples: "If it holds a non-empty ID: only the BAMs named <ID>.bam (exact name) for one of these IDs are kept; an ID with no BAM fails the task."
 	}
 
-	requirements {
-		container: container
+	runtime {
+		# Not container: (Cromwell 92 bug on Slurm, issue #7846; back to container: with Cromwell 93)
+		apptainer: container
 		cpu: threads
 		memory: "512 MiB"
 	}
@@ -417,8 +419,9 @@ task list_to_bed {
 		msi_helper: "Path to msi_detection_main_p.py."
 	}
 
-	requirements {
-		container: container
+	runtime {
+		# Not container: (Cromwell 92 bug on Slurm, issue #7846; back to container: with Cromwell 93)
+		apptainer: container
 		cpu: threads
 		memory: "2 GiB"
 	}
@@ -468,8 +471,9 @@ task align_chrom_naming {
 		output_name: "Output BED name [default: <region_bed basename>.chrnorm.bed]."
 	}
 
-	requirements {
-		container: container
+	runtime {
+		# Not container: (Cromwell 92 bug on Slurm, issue #7846; back to container: with Cromwell 93)
+		apptainer: container
 		cpu: threads
 		memory: "512 MiB"
 	}
@@ -520,8 +524,9 @@ task name_correspondence {
 		append_position: "Append the region's #<chrom>:<start>-<end> to the name (panel step)."
 	}
 
-	requirements {
-		container: container
+	runtime {
+		# Not container: (Cromwell 92 bug on Slurm, issue #7846; back to container: with Cromwell 93)
+		apptainer: container
 		cpu: threads
 		memory: "512 MiB"
 	}
@@ -563,8 +568,9 @@ task mark_list {
 		msi_helper: "Path to msi_detection_main_p.py."
 	}
 
-	requirements {
-		container: container
+	runtime {
+		# Not container: (Cromwell 92 bug on Slurm, issue #7846; back to container: with Cromwell 93)
+		apptainer: container
 		cpu: threads
 		memory: "2 GiB"
 	}
@@ -572,9 +578,9 @@ task mark_list {
 
 task report {
 	meta {
-		description: "Build this run's HTML reports into viz/runs/<run_id>/ (run and sample pages; the all-runs dashboard is built by msi_detection_post_p.py index) from every BAM's msisensor-pro _all, returned as a Directory output; the log goes to the task's stderr."
+		description: "Build this run's HTML reports into viz/runs/<run_id>/ (run and sample pages; the all-runs dashboard is built by msi_detection_post_p.py index) from every BAM's msisensor-pro _all, returned as viz.tar.gz (WDL 1.1 has no Directory output); the log goes to the task's stderr."
 		outputs: {
-			viz: "This run's HTML/JS reports: runs/<run_id>/.",
+			viz: "This run's HTML/JS reports, runs/<run_id>/, and samples.tsv, archived (viz.tar.gz, extracted by msi_detection_post_p.py index).",
 		}
 	}
 
@@ -617,10 +623,13 @@ task report {
 			--consensus-roi-cutoff ~{consensus_roi_cutoff} \
 			~{if defined(source_run) then "--source-run \"" + select_first([source_run]) + "\"" else ""} \
 			~{if defined(roi_correspondence_bed) then "--roi-bed \"" + select_first([roi_correspondence_bed]) + "\"" else ""}
+		# samples.tsv goes in too: index reads it, and a call taken from the cache
+		# only gets its declared outputs.
+		tar -czf viz.tar.gz samples.tsv -C viz .
 	>>>
 
 	output {
-		Directory viz = "viz"
+		File viz = "viz.tar.gz"
 	}
 
 	parameter_meta {
@@ -641,8 +650,9 @@ task report {
 		msi_helper: "Path to msi_detection_report_p.py."
 	}
 
-	requirements {
-		container: container
+	runtime {
+		# Not container: (Cromwell 92 bug on Slurm, issue #7846; back to container: with Cromwell 93)
+		apptainer: container
 		cpu: threads
 		memory: "2 GiB"
 	}

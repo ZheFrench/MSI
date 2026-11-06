@@ -8,7 +8,7 @@ msi_detection_main_p.py (reference lists) and msi_detection_report_p.py (this
 run's report), whose page code it reuses (import: both scripts sit in
 main-scripts/).
 
-    index        --viz DIR [--run-outputs outputs.json]
+    index        --viz DIR [--run-outputs metadata.json]
         Copies the run's runs/<run_id>/ into DIR/runs/, with its msisensor-pro
         _all files, then rebuilds the dashboard from every DIR/runs/*/:
 
@@ -17,7 +17,7 @@ main-scripts/).
     DIR/index_msi_run.html, index_msi_sample.html - written once (only if the template changed)
 
 Usage (BASH.msi_detection.cron.sh / BASH.msi_detection.batch.sh, after each run):
-    msi_detection_post_p.py index --viz RESULTS_DIR --run-outputs <run>/outputs.json
+    msi_detection_post_p.py index --viz RESULTS_DIR --run-outputs <run>.metadata.json
 """
 
 import argparse
@@ -25,6 +25,8 @@ import json
 import logging
 import shutil
 import sys
+import tarfile
+import tempfile
 from pathlib import Path
 
 # msi_detection_report_p.py sits next to this script (main-scripts/): importable
@@ -316,22 +318,21 @@ __HEAD_LINKS__
 # index: add a run's pages to the reports folder, rebuild the dashboard
 # ---------------------------------------------------------------------------
 
-def copy_msisensor_all(outputs: dict, run_dest: Path) -> None:
+def copy_msisensor_all(outputs: dict, samples_tsv: Path, run_dest: Path) -> None:
     """Copy every BAM's msisensor-pro _all (outputs' msisensorpro_all) into
     run_dest/Raw/, as <library>_<sample>_all (library label as on the pages, e.g.
     libA_D22D02209T_all; <sample>_all for a BAM without library folder). The
     same sample name exists in every library, so each _all gets its library
-    from the report's samples.tsv (next to its viz/: one line per BAM, sample
-    and library first, in the same order as msisensorpro_all, both following
-    the workflow's scatter)."""
+    from the report's samples.tsv (in viz.tar.gz, next to runs/: one line per
+    BAM, sample and library first, in the same order as msisensorpro_all, both
+    following the workflow's scatter)."""
     all_files = [Path(p) for p in outputs["msi_detection.msisensorpro_all"]]
-    samples_tsv = Path(outputs["msi_detection.report_viz"]).parent / "samples.tsv"
     rows = [line.split("\t") for line in samples_tsv.read_text().splitlines() if line]
     if len(rows) != len(all_files):
-        raise SystemExit(f"{samples_tsv}: {len(rows)} BAM(s), {len(all_files)} _all file(s) in outputs.json")
+        raise SystemExit(f"{samples_tsv}: {len(rows)} BAM(s), {len(all_files)} _all file(s) in the run outputs")
     for (sample, library, *_), all_file in zip(rows, all_files):
         if all_file.name != f"{sample}_all":
-            raise SystemExit(f"{all_file}: not the _all of {sample} ({samples_tsv} out of step with outputs.json)")
+            raise SystemExit(f"{all_file}: not the _all of {sample} ({samples_tsv} out of step with the run outputs)")
         prefix = f"{extract_library_suffix(library)}_" if library != "." else ""
         raw_dir = run_dest / RAW_DIRNAME
         raw_dir.mkdir(exist_ok=True)
@@ -340,8 +341,8 @@ def copy_msisensor_all(outputs: dict, run_dest: Path) -> None:
 
 
 def index(args) -> None:
-    """Add this run's viz/runs/<run_id>/ (copied from the ta03_report call
-    folder named by --run-outputs, so the sprocket run stays complete) to the
+    """Add this run's viz/runs/<run_id>/ (extracted from the ta03_report
+    viz.tar.gz named by --run-outputs, so the Cromwell run stays complete) to the
     reports folder, with its msisensor-pro _all files (copy_msisensor_all),
     then rebuild the dashboard from every viz/runs/*/: index_msi_run.js and
     index_msi_sample.js are rewritten, index_msi_run.html and
@@ -352,15 +353,22 @@ def index(args) -> None:
 
     if args.run_outputs:
         outputs = json.loads(Path(args.run_outputs).read_text())
-        new_runs = Path(outputs["msi_detection.report_viz"]) / RUNS_DIRNAME
-        for run_dir in sorted(d for d in new_runs.iterdir() if d.is_dir()):
-            dest = viz_dir / RUNS_DIRNAME / run_dir.name
-            if dest.exists():
-                shutil.rmtree(dest)
-                logger.info(f"Replacing {dest}")
-            shutil.copytree(run_dir, dest)
-            logger.info(f"Added {dest}")
-            copy_msisensor_all(outputs, dest)
+        # Cromwell's metadata JSON (run -m): the outputs are under "outputs".
+        outputs = outputs.get("outputs", outputs)
+        # report_viz is viz/ archived (WDL 1.1 has no Directory output):
+        # extracted next to the reports folder, then copied as before.
+        with tempfile.TemporaryDirectory(dir=viz_dir) as extracted:
+            with tarfile.open(outputs["msi_detection.report_viz"]) as tar:
+                tar.extractall(extracted, filter="data")
+            new_runs = Path(extracted) / RUNS_DIRNAME
+            for run_dir in sorted(d for d in new_runs.iterdir() if d.is_dir()):
+                dest = viz_dir / RUNS_DIRNAME / run_dir.name
+                if dest.exists():
+                    shutil.rmtree(dest)
+                    logger.info(f"Replacing {dest}")
+                shutil.copytree(run_dir, dest)
+                logger.info(f"Added {dest}")
+                copy_msisensor_all(outputs, Path(extracted) / "samples.tsv", dest)
 
     runs = rebuild_runs_manifest(viz_dir)
     ensure_output_index_page(viz_dir)
@@ -375,7 +383,7 @@ def main():
     p = sub.add_parser("index", help="Add a run's pages to the reports folder and rebuild the dashboard.")
     p.add_argument("--viz", required=True, help="Reports folder (RESULTS_DIR of BASH.msi_detection.cron.sh).")
     p.add_argument("--run-outputs", default=None,
-                   help="outputs.json of a run: its report_viz runs/<run_id>/ is copied into --viz/runs/.")
+                   help="Cromwell metadata JSON of a run (or a JSON of its outputs): its report_viz runs/<run_id>/ is extracted into --viz/runs/.")
 
     args = parser.parse_args()
 

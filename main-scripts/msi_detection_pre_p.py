@@ -3,7 +3,7 @@
 msi_detection_pre_p.py
 
 Pre-processing of the msi_detection-1.0.0.wdl workflow: picks the run(s) left
-to analyse and writes, for each, the params JSON (config) sprocket runs it
+to analyse and writes, for each, the params JSON (config) Cromwell runs it
 with. Steps:
 
     1-2. The runs to analyse: those ADIVAR has finished (status 3 in

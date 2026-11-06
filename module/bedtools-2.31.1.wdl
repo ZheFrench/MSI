@@ -1,4 +1,4 @@
-version 1.3
+version 1.1
 
 # MSI-Detection 0.1 - WDL pipelines.
 # Copyright (C) 2026 MoBiDiC
@@ -17,7 +17,7 @@ version 1.3
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 # bedtools (https://github.com/arq5x/bedtools2) wrapped as WDL tasks. Each task
-# names its image (requirements.container) and calls `bedtools` directly.
+# names its image (runtime.apptainer) and calls `bedtools` directly.
 #
 #   import "module/bedtools-2.31.1.wdl" as bedtools
 #   call bedtools.intersect { ... }
@@ -68,8 +68,9 @@ task intersect {
 		container: "bedtools image."
 	}
 
-	requirements {
-		container: container
+	runtime {
+		# Not container: (Cromwell 92 bug on Slurm, issue #7846; back to container: with Cromwell 93)
+		apptainer: container
 		cpu: threads
 		memory: "2 GiB"
 	}

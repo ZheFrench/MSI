@@ -1,4 +1,4 @@
-version 1.3
+version 1.1
 
 # MSI-Detection 0.1 - WDL pipelines.
 # Copyright (C) 2026 MoBiDiC
@@ -17,7 +17,7 @@ version 1.3
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 # msisensor-pro (https://github.com/xjtu-omics/msisensor-pro) wrapped as WDL
-# tasks. Each task names its image (requirements.container) and calls
+# tasks. Each task names its image (runtime.apptainer) and calls
 # `msisensor-pro` directly.
 #
 #   import "module/msisensorpro-1.3.0.wdl" as sensorpro
@@ -60,8 +60,9 @@ task scan {
 		container: "msisensor-pro image."
 	}
 
-	requirements {
-		container: container
+	runtime {
+		# Not container: (Cromwell 92 bug on Slurm, issue #7846; back to container: with Cromwell 93)
+		apptainer: container
 		cpu: threads
 		memory: "4 GiB"
 	}
@@ -121,8 +122,9 @@ task pro {
 		container: "msisensor-pro image."
 	}
 
-	requirements {
-		container: container
+	runtime {
+		# Not container: (Cromwell 92 bug on Slurm, issue #7846; back to container: with Cromwell 93)
+		apptainer: container
 		cpu: threads
 		memory: "4 GiB"
 	}

@@ -14,12 +14,12 @@ dashboard, after the workflow: msi_detection_post_p.py):
         Full .list with "filter" = PASS for sites in PANEL_BED, NO otherwise
         (the list msisensor-pro pro analyses when a panel is given).
 
-Kept apart from the report on purpose: sprocket's call cache keys on the task's
+Kept apart from the report on purpose: Cromwell's call cache keys on the task's
 input files, so editing the report code must not invalidate these steps (their
 outputs are whole-genome lists, ~100 MB each).
 
 Usage (normally only from msi_detection-1.0.0.wdl):
-    sprocket run msi_detection-1.0.0.wdl @<params JSON>
+    java -jar cromwell.jar run msi_detection-1.0.0.wdl -i <inputs JSON>
 """
 
 import argparse
