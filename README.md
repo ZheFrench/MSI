@@ -123,6 +123,7 @@ chr14	23652317	23652397	NR21	0	+
 |---|---|
 | `PIPELINE_DIR` | this folder |
 | `CONTAINERS_DIR` | Apptainer images (`*.sif`) |
+| `REFDATA_DIR` | references (genome, panel and ROI BEDs, `pro_list`): bound read-only in the task containers with `PIPELINE_DIR`. On another filesystem than `SCRATCH_DIR`, Cromwell soft-links the task inputs instead of hard-linking them, and the link targets must be visible in the containers. Also set in the batch and test launchers |
 | `SCRATCH_DIR` | scratch folder, where the script runs and everything but the reports is computed: Cromwell's runs and call cache (`Cromwell/`), the params JSON (`Config/`) and the copies of ADIVAR's locker and of the run's sample sheet (`Temp/`) |
 | `RESULTS_DIR` | final reports folder: `index` copies each run's reports into it and rebuilds the dashboard |
 | `RUNS_DIR` | parent folder of the sequencing run folders: the cron copies `$RUNS_DIR/<run>/bcl2fastq/SampleSheet.csv` (`<run>`: name in ADIVAR's locker) into `$SCRATCH_DIR/Temp/<run>-SampleSheet.csv` and reads only that copy |

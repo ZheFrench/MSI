@@ -12,6 +12,10 @@ set -eu
 PIPELINE_DIR=/media/jp/SSD2/CHU/code/pipeline-jp
 # Apptainer images (*.sif; their recipes: $PIPELINE_DIR/apptainer-recipes/*.def)
 CONTAINERS_DIR=/media/jp/SSD2/CHU/containers
+# References (genome, panel and ROI BEDs of params/template.json), bound
+# read-only in the task containers with $PIPELINE_DIR (python helpers): across
+# filesystems, Cromwell soft-links its inputs, whose targets must be visible.
+REFDATA_DIR=/media/jp/SSD2/CHU/refData
 SCRATCH_DIR=/media/jp/SSD2/CHU/Scratch/MSI
 
 WDL=$PIPELINE_DIR/msi_detection-1.0.0.wdl
@@ -62,7 +66,7 @@ with open(sys.argv[1]) as f:
 echo "=== cromwell run: $PARAMS"
 echo "    folder: $WORK_DIR (log of this run: cromwell-executions/workflow-logs/workflow.<id>.log; all of Cromwell's: cromwell.log; jobs: squeue)"
 status=0
-MSI_CONTAINERS_DIR=$CONTAINERS_DIR APPTAINER_BIND=$(ro "$RUN_DIR") \
+MSI_CONTAINERS_DIR=$CONTAINERS_DIR APPTAINER_BIND=$(ro "$RUN_DIR"),$(ro "$PIPELINE_DIR"),$(ro "$REFDATA_DIR") \
 	"$JAVA" -Dconfig.file="$CROMWELL_CONFIG" -jar "$CROMWELL_JAR" \
 	run "$WDL" -i inputs.json -m metadata.json > cromwell.log 2>&1 || status=$?
 

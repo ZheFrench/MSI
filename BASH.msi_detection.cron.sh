@@ -5,6 +5,10 @@ set -eu
 PIPELINE_DIR=/media/jp/SSD2/CHU/code/pipeline-jp
 # Apptainer images (*.sif; their recipes: $PIPELINE_DIR/apptainer-recipes/*.def)
 CONTAINERS_DIR=/media/jp/SSD2/CHU/containers
+# References (genome, panel and ROI BEDs of params/template.json), bound
+# read-only in the task containers with $PIPELINE_DIR (python helpers): across
+# filesystems, Cromwell soft-links its inputs, whose targets must be visible.
+REFDATA_DIR=/media/jp/SSD2/CHU/refData
 SCRATCH_DIR=/media/jp/SSD2/CHU/Scratch/MSI/Cron
 
 mkdir -p "$SCRATCH_DIR"
@@ -80,7 +84,8 @@ post_process() {
 # takes a single inputs JSON, so $INSTALL and $2 are merged into inputs/$1.json
 # (the last file wins). Its log goes to logs/$1.log, its outputs (paths in
 # cromwell-executions/) to metadata/$1.json. $3: data folders bound in the
-# task containers (APPTAINER_BIND: the run directory, read by path).
+# task containers (APPTAINER_BIND: the run directory, read by path, with
+# $PIPELINE_DIR and $REFDATA_DIR).
 cromwell_run() {
 	mkdir -p "$CROMWELL_DIR/inputs" "$CROMWELL_DIR/metadata" "$CROMWELL_DIR/logs"
 	py "$CROMWELL_DIR/inputs,$(ro "$INSTALL"),$(ro "$2")" -c 'import json, sys
@@ -150,7 +155,7 @@ CONFIG=$(python_slurm_job pre_process "$(ro "$SAMPLE_SHEET"),$(ro "$RUN_BAMS"),$
 # Named after its params JSON (<date>-<run>-<Experiment Name>, one per run).
 RUN=$(basename "$CONFIG" .json)
 echo "=== $CONFIG"
-cromwell_run "$RUN" "$CONFIG" "$(ro "$RUN_BAMS")"
+cromwell_run "$RUN" "$CONFIG" "$(ro "$RUN_BAMS"),$(ro "$PIPELINE_DIR"),$(ro "$REFDATA_DIR")"
 index "$RUN"
 # Only reached when every step above succeeded (set -e).
 echo "$(date '+%Y-%m-%d %H:%M:%S') [DONE]: $RUN_ID ($EXPERIMENT) analysed, reports in $RESULTS_DIR/index_msi_run.html"

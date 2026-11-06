@@ -12,6 +12,12 @@ set -eu
 PIPELINE_DIR=/media/jp/SSD2/CHU/code/pipeline-jp
 # Apptainer images (*.sif; their recipes: $PIPELINE_DIR/apptainer-recipes/*.def)
 CONTAINERS_DIR=/media/jp/SSD2/CHU/containers
+# Read by backends.conf/cromwell.conf (submit) to find each task's .sif.
+export MSI_CONTAINERS_DIR=$CONTAINERS_DIR
+# References (genome, panel and ROI BEDs of params/template.json), bound
+# read-only in the task containers with $PIPELINE_DIR (python helpers): across
+# filesystems, Cromwell soft-links its inputs, whose targets must be visible.
+REFDATA_DIR=/media/jp/SSD2/CHU/refData
 # Scratch: the script runs from it, Cromwell's runs are in it
 SCRATCH_DIR=/media/jp/SSD2/CHU/Scratch/MSI/Batch-1
 
@@ -70,7 +76,8 @@ post_process() {
 # takes a single inputs JSON, so $INSTALL and $2 are merged into inputs/$1.json
 # (the last file wins). Its log goes to logs/$1.log, its outputs (paths in
 # cromwell-executions/) to metadata/$1.json. The run directory of $2, read by
-# path, is bound in the task containers (APPTAINER_BIND).
+# path, is bound in the task containers (APPTAINER_BIND), with $PIPELINE_DIR and
+# $REFDATA_DIR.
 cromwell_run() {
 	mkdir -p "$CROMWELL_DIR/inputs" "$CROMWELL_DIR/metadata" "$CROMWELL_DIR/logs"
 	py "$CROMWELL_DIR/inputs,$(ro "$INSTALL"),$(ro "$2")" -c 'import json, sys
@@ -83,7 +90,7 @@ with open(sys.argv[1], "w") as f:
 	run_dir=$(py "$(ro "$CROMWELL_DIR/inputs")" -c 'import json, sys
 with open(sys.argv[1]) as f:
     print(json.load(f)["msi_detection.inputs"]["run"])' "$CROMWELL_DIR/inputs/$1.json")
-	(cd "$CROMWELL_DIR" && MSI_CONTAINERS_DIR=$CONTAINERS_DIR APPTAINER_BIND=$(ro "$run_dir") \
+	(cd "$CROMWELL_DIR" && APPTAINER_BIND=$(ro "$run_dir"),$(ro "$PIPELINE_DIR"),$(ro "$REFDATA_DIR") \
 		"$JAVA" -Dconfig.file="$CROMWELL_CONFIG" -jar "$CROMWELL_JAR" run "$WDL" \
 		-i "inputs/$1.json" -m "metadata/$1.json" > "logs/$1.log" 2>&1) \
 		|| { echo "Cromwell failed on $1: see $CROMWELL_DIR/logs/$1.log" >&2; return 1; }
